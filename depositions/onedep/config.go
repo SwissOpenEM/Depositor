@@ -22,12 +22,14 @@ type UserInput struct {
 	Users       []string     `json:"users"`
 	Country     string       `json:"country"`
 	Experiments []Experiment `json:"experiments"`
+	Files       []FileUpload `json:"files"`
 }
 type FileUpload struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	File    string `json:"file"`
-	Contour string `json:"contour"`
+	Name    string  `json:"name"`
+	Type    string  `json:"type"`
+	File    string  `json:"file"`
+	Contour float32 `json:"contour"`
+	Details string  `json:"details"`
 }
 
 type DepositionFile struct {
@@ -36,7 +38,7 @@ type DepositionFile struct {
 	Type         string
 	PixelSpacing [3]float32
 	ContourLevel float32
-	Description  string
+	Details      string
 }
 
 type Deposition struct {

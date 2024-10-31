@@ -114,10 +114,12 @@ func CreateDeposition(client *http.Client, userInput UserInput) (Deposition, err
 }
 
 // sends a request to OneDep to add files to an existing deposition with id
-func addFileToDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload) (DepositionFile, error) {
+func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload) (DepositionFile, error) {
 	var fD DepositionFile
 	fD.DId = deposition.Id
 	fD.Type = fileUpload.Type
+	fD.ContourLevel = fileUpload.Contour
+	fD.Details = fileUpload.Details
 
 	// create body
 	body := new(bytes.Buffer)
@@ -196,7 +198,7 @@ func addFileToDeposition(client *http.Client, deposition Deposition, fileUpload 
 }
 
 // sends a request to OneDep to add files to an existing deposition with id
-func addMetadataToFile(client *http.Client, fD DepositionFile, fileUpload FileUpload) (DepositionFile, error) {
+func AddMetadataToFile(client *http.Client, fD DepositionFile) (DepositionFile, error) {
 
 	// Prepare metadata request
 	data := map[string]interface{}{
@@ -206,9 +208,9 @@ func addMetadataToFile(client *http.Client, fD DepositionFile, fileUpload FileUp
 				"y": fD.PixelSpacing[1],
 				"z": fD.PixelSpacing[2],
 			},
-			"contour": fileUpload.Contour, // There seems to be no way to extract it from header?
+			"contour": fD.ContourLevel, // There seems to be no way to extract it from header?
 		},
-		"description": "",
+		"description": fD.Details,
 	}
 
 	jsonBody, err := json.Marshal(data)
