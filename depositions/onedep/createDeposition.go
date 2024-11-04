@@ -232,9 +232,7 @@ func AddMetadataToFile(client *http.Client, fD DepositionFile) (DepositionFile, 
 	req.Header.Add("Authorization", bearer)
 	req.Header.Set("Content-Type", "application/json")
 
-	fmt.Println("send the request to upload metedata", req)
 	// Send the request
-
 	resp, err := client.Do(req)
 	if err != nil {
 		return fD, fmt.Errorf("error sending request to the server: %v", err)

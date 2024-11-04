@@ -16,7 +16,13 @@ type Experiment struct {
 	Type    string `json:"type"`
 	Subtype string `json:"subtype"`
 }
-
+type ScicatEM struct {
+	Email       string       `json:"email"`
+	Users       []string     `json:"users"`
+	Country     string       `json:"country"`
+	Experiments []Experiment `json:"experiments"`
+	Files       []FileUpload `json:"files"`
+}
 type UserInput struct {
 	Email       string       `json:"email"`
 	Users       []string     `json:"users"`
