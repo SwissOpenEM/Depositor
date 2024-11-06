@@ -1,5 +1,7 @@
 package onedep
 
+import "mime/multipart"
+
 const baseURL = "https://onedep-depui-test.wwpdb.org/deposition/api/v1/depositions/"
 
 // these constants are described in the definition of CCP4 format used for mrc files
@@ -12,24 +14,48 @@ const (
 	numberOfWords = 56
 )
 
-type Experiment struct {
+type EmMethod struct {
 	Type    string `json:"type"`
-	Subtype string `json:"subtype"`
+	Subtype string `json:"subtype,omitempty"`
 }
+
+var EmMethods = map[string]EmMethod{
+	"helical":                  {Type: "em", Subtype: "helical"},
+	"single-particle":          {Type: "em", Subtype: "single"},
+	"subtomogram-averaging":    {Type: "em", Subtype: "subtomogram"},
+	"tomogram":                 {Type: "em", Subtype: "tomography"},
+	"electron-cristallography": {Type: "ec"},
+}
+
 type ScicatEM struct {
-	Email       string       `json:"email"`
-	Users       []string     `json:"users"`
-	Country     string       `json:"country"`
-	Experiments []Experiment `json:"experiments"`
-	Files       []FileUpload `json:"files"`
+	Email      string
+	Metadata   string
+	Experiment string
+	Files      []*multipart.FileHeader
+
+	// Email string `json:"email"`
+	// Users       []string     `json:"users"`
+	// Country     string       `json:"country"`
+	// Experiments []Experiment `json:"experiments"`
+	// Metadata   string     `json:"metadata"`
+	// Experiment string     `json:"experiments"`
+	// Files      []*os.File `json:"files"`
+	// Files       []FileUpload `json:"files"`
 }
-type UserInput struct {
-	Email       string       `json:"email"`
-	Users       []string     `json:"users"`
-	Country     string       `json:"country"`
-	Experiments []Experiment `json:"experiments"`
-	Files       []FileUpload `json:"files"`
+type UserInfo struct {
+	Email       string     `json:"email"`
+	Users       []string   `json:"users"`
+	Country     string     `json:"country"`
+	Experiments []EmMethod `json:"experiments"`
 }
+
+//	type UserInput struct {
+//		Email       string       `json:"email"`
+//		Users       []string     `json:"users"`
+//		Country     string       `json:"country"`
+//		Experiments []Experiment `json:"experiments"`
+//		Files       []FileUpload `json:"files"`
+//	}
 type FileUpload struct {
 	Name    string  `json:"name"`
 	Type    string  `json:"type"`

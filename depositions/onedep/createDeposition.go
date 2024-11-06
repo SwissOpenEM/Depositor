@@ -19,12 +19,14 @@ func decodeDid(resp *http.Response) (string, error) {
 		Did string `json:"id"`
 	}
 	var d DidType
+	fmt.Println("checkpoint1")
 	decoder := json.NewDecoder(resp.Body)
 	err := decoder.Decode(&d)
 
 	if err != nil {
 		return "", fmt.Errorf("could not decode id from deposition entry: %v", err)
 	}
+	fmt.Println("checkpoint2")
 	return d.Did, nil
 }
 
@@ -48,7 +50,7 @@ func decodeFid(resp *http.Response) (string, error) {
 }
 
 // reades the header of mrc files and exstracts the pixel spacing
-func getMeta(file *os.File) ([3]float32, error) {
+func GetMeta(file *os.File) ([3]float32, error) {
 	var pixelSpacing [3]float32
 	// https://bio3d.colorado.edu/imod/betaDoc/mrc_format.txt
 	// words I care about: Mode(4),	sampling along axes of unit cell (8-10), cell dimensions in angstroms(11-13) --> pixel spacing = cell dim/sampling
@@ -73,15 +75,19 @@ func getMeta(file *os.File) ([3]float32, error) {
 }
 
 // sends a request to OneDep to create a new deposition
-func CreateDeposition(client *http.Client, userInput UserInput) (Deposition, error) {
+func CreateDeposition(client *http.Client, userInput UserInfo) (Deposition, error) {
 	var deposition Deposition
 	// Convert the user input to JSON
 	jsonInput, err := json.Marshal(userInput)
 	if err != nil {
 		return deposition, err
 	}
+	fmt.Println(string(jsonInput))
 	url := baseURL + "new"
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonInput))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonInput))
+	if err != nil {
+		return deposition, fmt.Errorf("error sending request: %v", err)
+	}
 
 	jwtToken, err := os.ReadFile("bearer.jwt")
 	if err != nil {
@@ -103,7 +109,9 @@ func CreateDeposition(client *http.Client, userInput UserInput) (Deposition, err
 			return deposition, err
 		}
 	} else {
+		fmt.Println("bas status code")
 		body, err := io.ReadAll(resp.Body)
+		fmt.Println(resp.StatusCode, resp.Status)
 		if err != nil {
 			return deposition, fmt.Errorf("create: failed to create new deposition: status code %v, status %s, unreadable body", resp.StatusCode, resp.Status)
 		}
@@ -139,7 +147,7 @@ func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload 
 	defer file.Close()
 
 	// extract pixel spacing necessary to upload metadata
-	fD.PixelSpacing, err = getMeta(file)
+	fD.PixelSpacing, err = GetMeta(file)
 	if err != nil {
 		log.Printf("failed to extract pixel spacing: %v; please provide it in OneDep manually!", err)
 		//return fD, err
