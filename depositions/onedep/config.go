@@ -1,7 +1,5 @@
 package onedep
 
-import "mime/multipart"
-
 const baseURL = "https://onedep-depui-test.wwpdb.org/deposition/api/v1/depositions/"
 
 // these constants are described in the definition of CCP4 format used for mrc files
@@ -27,21 +25,12 @@ var EmMethods = map[string]EmMethod{
 	"electron-cristallography": {Type: "ec"},
 }
 
-type ScicatEM struct {
-	Email      string
-	Metadata   string
-	Experiment string
-	Files      []*multipart.FileHeader
-
-	// Email string `json:"email"`
-	// Users       []string     `json:"users"`
-	// Country     string       `json:"country"`
-	// Experiments []Experiment `json:"experiments"`
-	// Metadata   string     `json:"metadata"`
-	// Experiment string     `json:"experiments"`
-	// Files      []*os.File `json:"files"`
-	// Files       []FileUpload `json:"files"`
-}
+//	type ScicatEM struct {
+//		Email      string
+//		Metadata   string
+//		Experiment string
+//		Files      []*multipart.FileHeader
+//	}
 type UserInfo struct {
 	Email       string     `json:"email"`
 	Users       []string   `json:"users"`
@@ -57,9 +46,9 @@ type UserInfo struct {
 //		Files       []FileUpload `json:"files"`
 //	}
 type FileUpload struct {
-	Name    string  `json:"name"`
-	Type    string  `json:"type"`
-	File    string  `json:"file"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+	// File    string  `json:"file"`
 	Contour float32 `json:"contour"`
 	Details string  `json:"details"`
 }
@@ -78,3 +67,5 @@ type Deposition struct {
 	Files        []DepositionFile
 	MetadataFile string
 }
+
+var NeedMeta = []string{"vo-map", "add-map", "half-map", "mask-map"}

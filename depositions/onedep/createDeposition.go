@@ -10,7 +10,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"path/filepath"
 )
 
 // extracts the id of the deposition from the response
@@ -19,14 +18,12 @@ func decodeDid(resp *http.Response) (string, error) {
 		Did string `json:"id"`
 	}
 	var d DidType
-	fmt.Println("checkpoint1")
 	decoder := json.NewDecoder(resp.Body)
 	err := decoder.Decode(&d)
 
 	if err != nil {
 		return "", fmt.Errorf("could not decode id from deposition entry: %v", err)
 	}
-	fmt.Println("checkpoint2")
 	return d.Did, nil
 }
 
@@ -50,7 +47,7 @@ func decodeFid(resp *http.Response) (string, error) {
 }
 
 // reades the header of mrc files and exstracts the pixel spacing
-func GetMeta(file *os.File) ([3]float32, error) {
+func getMeta(file multipart.File) ([3]float32, error) {
 	var pixelSpacing [3]float32
 	// https://bio3d.colorado.edu/imod/betaDoc/mrc_format.txt
 	// words I care about: Mode(4),	sampling along axes of unit cell (8-10), cell dimensions in angstroms(11-13) --> pixel spacing = cell dim/sampling
@@ -58,6 +55,10 @@ func GetMeta(file *os.File) ([3]float32, error) {
 	_, err := file.Read(header)
 	if err != nil {
 		return pixelSpacing, fmt.Errorf("failed to read header: %v", err)
+	}
+	_, err = file.Seek(0, io.SeekStart)
+	if err != nil {
+		return pixelSpacing, err
 	}
 	var mode uint32 = binary.LittleEndian.Uint32(header[modeWord*wordSize : modeWord*wordSize+wordSize])
 	var cellDim [3]float32
@@ -82,11 +83,10 @@ func CreateDeposition(client *http.Client, userInput UserInfo) (Deposition, erro
 	if err != nil {
 		return deposition, err
 	}
-	fmt.Println(string(jsonInput))
 	url := baseURL + "new"
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonInput))
 	if err != nil {
-		return deposition, fmt.Errorf("error sending request: %v", err)
+		return deposition, fmt.Errorf("error sending request to url %v: %v", url, err)
 	}
 
 	jwtToken, err := os.ReadFile("bearer.jwt")
@@ -109,9 +109,7 @@ func CreateDeposition(client *http.Client, userInput UserInfo) (Deposition, erro
 			return deposition, err
 		}
 	} else {
-		fmt.Println("bas status code")
 		body, err := io.ReadAll(resp.Body)
-		fmt.Println(resp.StatusCode, resp.Status)
 		if err != nil {
 			return deposition, fmt.Errorf("create: failed to create new deposition: status code %v, status %s, unreadable body", resp.StatusCode, resp.Status)
 		}
@@ -122,7 +120,7 @@ func CreateDeposition(client *http.Client, userInput UserInfo) (Deposition, erro
 }
 
 // sends a request to OneDep to add files to an existing deposition with id
-func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload) (DepositionFile, error) {
+func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file multipart.File) (DepositionFile, error) {
 	var fD DepositionFile
 	fD.DId = deposition.Id
 	fD.Type = fileUpload.Type
@@ -139,21 +137,19 @@ func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload 
 		return fD, err
 	}
 
-	// open file
-	file, err := os.Open(fileUpload.File)
-	if err != nil {
-		return fD, err
-	}
-	defer file.Close()
-
 	// extract pixel spacing necessary to upload metadata
-	fD.PixelSpacing, err = GetMeta(file)
-	if err != nil {
-		log.Printf("failed to extract pixel spacing: %v; please provide it in OneDep manually!", err)
-		//return fD, err
+
+	for j := range NeedMeta {
+		if fileUpload.Type == NeedMeta[j] {
+			pixelSpacing, err := getMeta(file)
+			if err != nil {
+				log.Printf("failed to extract pixel spacing: %v; please provide it in OneDep manually!", err)
+			}
+			fD.PixelSpacing = pixelSpacing
+		}
 	}
 	//upload files
-	part, err := writer.CreateFormFile("file", filepath.Base(fileUpload.File))
+	part, err := writer.CreateFormFile("file", fileUpload.Name)
 	if err != nil {
 		return fD, err
 	}
@@ -161,7 +157,7 @@ func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload 
 	if err != nil {
 		return fD, err
 	}
-	// Close the writer to finalize the multipart form
+
 	err = writer.Close()
 	if err != nil {
 		return fD, err
@@ -243,7 +239,7 @@ func AddMetadataToFile(client *http.Client, fD DepositionFile) (DepositionFile, 
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		return fD, fmt.Errorf("error sending request to the server: %v", err)
+		return fD, fmt.Errorf("error sending request to  to url %v: %v", urlFileMeta, err)
 	}
 	defer resp.Body.Close()
 
