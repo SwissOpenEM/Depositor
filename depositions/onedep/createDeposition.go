@@ -120,25 +120,33 @@ func CreateDeposition(client *http.Client, userInput UserInfo) (Deposition, erro
 }
 
 // sends a request to OneDep to add files to an existing deposition with id
-func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file multipart.File) (DepositionFile, error) {
+func AddCIFtoDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file string) (DepositionFile, error) {
 	var fD DepositionFile
 	fD.DId = deposition.Id
+	fD.Name = fileUpload.Name
 	fD.Type = fileUpload.Type
 	fD.ContourLevel = fileUpload.Contour
 	fD.Details = fileUpload.Details
 
-	// create body
-	body := new(bytes.Buffer)
-	writer := multipart.NewWriter(body)
-	if err := writer.WriteField("name", fileUpload.Name); err != nil {
+	// open file
+	cifFile, err := os.Open(file)
+	if err != nil {
 		return fD, err
 	}
-	if err := writer.WriteField("type", fileUpload.Type); err != nil {
-		return fD, err
-	}
+	defer cifFile.Close()
+	return UploadFile(client, fD, cifFile)
+}
+
+// sends a request to OneDep to add multipart files to an existing deposition with id
+func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file multipart.File) (DepositionFile, error) {
+	var fD DepositionFile
+	fD.DId = deposition.Id
+	fD.Name = fileUpload.Name
+	fD.Type = fileUpload.Type
+	fD.ContourLevel = fileUpload.Contour
+	fD.Details = fileUpload.Details
 
 	// extract pixel spacing necessary to upload metadata
-
 	for j := range NeedMeta {
 		if fileUpload.Type == NeedMeta[j] {
 			pixelSpacing, err := getMeta(file)
@@ -148,8 +156,23 @@ func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload 
 			fD.PixelSpacing = pixelSpacing
 		}
 	}
+	return UploadFile(client, fD, file)
+}
+
+func UploadFile(client *http.Client, fD DepositionFile, file *os.File) (DepositionFile, error) {
+
+	// create body
+	body := new(bytes.Buffer)
+	writer := multipart.NewWriter(body)
+	if err := writer.WriteField("name", fD.Name); err != nil {
+		return fD, err
+	}
+	if err := writer.WriteField("type", fD.Type); err != nil {
+		return fD, err
+	}
+
 	//upload files
-	part, err := writer.CreateFormFile("file", fileUpload.Name)
+	part, err := writer.CreateFormFile("file", fD.Name)
 	if err != nil {
 		return fD, err
 	}
@@ -164,7 +187,7 @@ func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload 
 	}
 
 	// Prepare the request
-	url := baseURL + deposition.Id + "/files/"
+	url := baseURL + fD.DId + "/files/"
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
 		return fD, err

@@ -3,17 +3,42 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
+	"os"
 	"tasks/depositions/onedep"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	parser "github.com/osc-em/converter-OSCEM-to-mmCIF/parser"
 )
 
 var version string = "DEV"
 
+// Convert multipart.File to *os.File by saving it to a temporary file
+func convertMultipartFileToFile(file multipart.File) (*os.File, error) {
+	tempFile, err := os.CreateTemp("", "uploaded-*")
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close() // Close the multipart.File after copying
+
+	// Copy the contents of the multipart.File to the temporary file
+	if _, err := io.Copy(tempFile, file); err != nil {
+		tempFile.Close()
+		return nil, err
+	}
+
+	// Close and reopen the file to reset the read pointer for future operations
+	if err := tempFile.Close(); err != nil {
+		return nil, err
+	}
+	return os.Open(tempFile.Name())
+}
+
 func create(c *gin.Context) {
-	err := c.Request.ParseMultipartForm(10 << 20) // 10 MB max memory
+	err := c.Request.ParseMultipartForm(10 << 20)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse Form data."})
 		return
@@ -35,12 +60,19 @@ func create(c *gin.Context) {
 		return
 	}
 	// Parse  JSON string into the Metadata
-	var metadata any
-	err = json.Unmarshal([]byte(metadataStr), &metadata)
+	var scientificMetadata map[string]any
+	err = json.Unmarshal([]byte(metadataStr), &scientificMetadata)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse scientific metadata to JSON."})
 		return
 	}
+	// create a temporary cif file that will be used for a deposition
+	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create a file to write cif file with metadata."})
+		return
+	}
+	fileScientificMetaPath := fileScientificMeta.Name()
 
 	var metadataFiles []onedep.FileUpload
 	err = json.Unmarshal([]byte(metadataFilesStr), &metadataFiles)
@@ -48,7 +80,6 @@ func create(c *gin.Context) {
 		errText := fmt.Errorf("error decoding JSON: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": errText})
 	}
-
 	// FIXME: add calls to validation API before creating any deposition - beta
 
 	// send a request to create a deposition:
@@ -63,13 +94,15 @@ func create(c *gin.Context) {
 
 	deposition, err := onedep.CreateDeposition(client, depData)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err})
+		errText := fmt.Errorf("failed to create deposition: %w", err)
+		fmt.Println(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": errText})
 		return
 	}
+
 	// fmt.Println("created deposition", deposition.Id)
 
-	// // FIXME: invoke the converter to mmCIF to produce metadata file
-
+	metadataTracked := false
 	for i, fileHeader := range files {
 		file, err := fileHeader.Open()
 		if err != nil {
@@ -78,8 +111,35 @@ func create(c *gin.Context) {
 			return
 		}
 		defer file.Close()
-
-		fileDeposited, err := onedep.AddFileToDeposition(client, deposition, metadataFiles[i], file)
+		var useFileForUpload *os.File
+		if metadataFiles[i].Type == "co-cif" {
+			fileTmp, err := convertMultipartFileToFile(file)
+			if err != nil {
+				errText := fmt.Errorf("failed to open cif file to read coordinates: %w", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": errText})
+				return
+			}
+			defer file.Close()
+			parser.PDBconvertFromFile(
+				scientificMetadata,
+				"",
+				"conversions.csv",
+				"mmcif_pdbx_v50.dic",
+				fileTmp,
+				fileScientificMetaPath,
+			)
+			metadataTracked = true
+			useFileForUpload, err = os.Open(fileScientificMetaPath)
+			if err != nil {
+				errText := fmt.Errorf("failed to open temp file with annotated model and scientific metadata: %w", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": errText})
+				return
+			}
+			defer file.Close()
+		} else {
+			useFileForUpload = file
+		}
+		fileDeposited, err := onedep.AddFileToDeposition(client, deposition, metadataFiles[i], useFileForUpload)
 		// osFile, err := handleOSFile(fileHeader)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err})
@@ -93,6 +153,18 @@ func create(c *gin.Context) {
 			}
 		}
 	}
+	// if no cif was provided, then extra metadata file needs to be created
+	if !metadataTracked {
+		parser.EMDBconvert(
+			scientificMetadata,
+			"",
+			"conversions.csv",
+			"mmcif_pdbx_v50.dic",
+			fileScientificMetaPath,
+		)
+	}
+	//FIX ME deposition of metadata file to cif after fix from EBI  (and then remove)
+	defer os.Remove(fileScientificMetaPath)
 
 	_, err = onedep.ProcesseDeposition(client, deposition)
 	if err != nil {

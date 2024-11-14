@@ -56,6 +56,7 @@ type FileUpload struct {
 type DepositionFile struct {
 	DId          string
 	Id           string
+	Name         string
 	Type         string
 	PixelSpacing [3]float32
 	ContourLevel float32
