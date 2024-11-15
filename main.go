@@ -66,6 +66,7 @@ func create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse scientific metadata to JSON."})
 		return
 	}
+	fmt.Println(scientificMetadata)
 	// create a temporary cif file that will be used for a deposition
 	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
@@ -90,14 +91,19 @@ func create(c *gin.Context) {
 		Country:     "United States", // temporarily
 		Experiments: experiments,
 	}
+	fmt.Println(depData)
 	client := &http.Client{}
 
-	deposition, err := onedep.CreateDeposition(client, depData)
-	if err != nil {
-		errText := fmt.Errorf("failed to create deposition: %w", err)
-		fmt.Println(err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": errText})
-		return
+	// deposition, err := onedep.CreateDeposition(client, depData)
+	// if err != nil {
+	// 	errText := fmt.Errorf("failed to create deposition: %w", err)
+	// 	fmt.Println(err)
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": errText})
+	// 	return
+	// }
+	deposition := onedep.Deposition{
+		Id:    "D_800041",
+		Files: []onedep.DepositionFile{},
 	}
 
 	// fmt.Println("created deposition", deposition.Id)
@@ -111,7 +117,7 @@ func create(c *gin.Context) {
 			return
 		}
 		defer file.Close()
-		var useFileForUpload *os.File
+		var fileDeposited onedep.DepositionFile
 		if metadataFiles[i].Type == "co-cif" {
 			fileTmp, err := convertMultipartFileToFile(file)
 			if err != nil {
@@ -120,6 +126,7 @@ func create(c *gin.Context) {
 				return
 			}
 			defer file.Close()
+			fmt.Println(scientificMetadata)
 			parser.PDBconvertFromFile(
 				scientificMetadata,
 				"",
@@ -129,7 +136,7 @@ func create(c *gin.Context) {
 				fileScientificMetaPath,
 			)
 			metadataTracked = true
-			useFileForUpload, err = os.Open(fileScientificMetaPath)
+			fileDeposited, err = onedep.AddCIFtoDeposition(client, deposition, metadataFiles[i], fileScientificMetaPath)
 			if err != nil {
 				errText := fmt.Errorf("failed to open temp file with annotated model and scientific metadata: %w", err)
 				c.JSON(http.StatusBadRequest, gin.H{"error": errText})
@@ -137,13 +144,12 @@ func create(c *gin.Context) {
 			}
 			defer file.Close()
 		} else {
-			useFileForUpload = file
-		}
-		fileDeposited, err := onedep.AddFileToDeposition(client, deposition, metadataFiles[i], useFileForUpload)
-		// osFile, err := handleOSFile(fileHeader)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err})
-			return
+			// fileDeposited, err = onedep.AddFileToDeposition(client, deposition, metadataFiles[i], file)
+			// if err != nil {
+			// 	c.JSON(http.StatusBadRequest, gin.H{"error": err})
+			// 	return
+			// }
+			fmt.Println("skipping..")
 		}
 		deposition.Files = append(deposition.Files, fileDeposited)
 
@@ -164,7 +170,8 @@ func create(c *gin.Context) {
 		)
 	}
 	//FIX ME deposition of metadata file to cif after fix from EBI  (and then remove)
-	defer os.Remove(fileScientificMetaPath)
+	//defer os.Remove(fileScientificMetaPath)
+	fmt.Println(fileScientificMetaPath)
 
 	_, err = onedep.ProcesseDeposition(client, deposition)
 	if err != nil {
