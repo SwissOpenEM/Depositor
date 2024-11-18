@@ -12,7 +12,13 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	parser "github.com/osc-em/converter-OSCEM-to-mmCIF/parser"
+	// "github.com/swaggo/gin-swagger" // gin-swagger middleware
+	// swagger embed files
 )
+
+//	@title			OpenEm Depositor API
+//	@version		1.0.0
+//	@description	Rest API for communication between SciCat frontend and depositor backend. Backend service enables deposition of datasets to OneDep API.
 
 var version string = "DEV"
 
@@ -37,7 +43,7 @@ func convertMultipartFileToFile(file multipart.File) (*os.File, error) {
 	return os.Open(tempFile.Name())
 }
 
-func create(c *gin.Context) {
+func Create(c *gin.Context) {
 	err := c.Request.ParseMultipartForm(10 << 20)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse Form data."})
@@ -181,7 +187,8 @@ func create(c *gin.Context) {
 
 }
 
-func getVersion(c *gin.Context) {
+// GetVersion returns the version of current backend
+func GetVersion(c *gin.Context) {
 	c.JSON(http.StatusOK, version)
 
 }
@@ -192,18 +199,7 @@ func main() {
 		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept"},
 	}))
-	router.GET("/version", getVersion)
-	router.POST("/onedep", create)
-	router.GET("/onedep", create)
+	router.GET("/version", GetVersion)
+	router.POST("/onedep", Create)
 	router.Run("localhost:8080")
 }
-
-// AllowOrigins:     []string{"https://foo.com"},
-// AllowMethods:     []string{"PUT", "PATCH"},
-// AllowHeaders:     []string{"Origin"},
-// ExposeHeaders:    []string{"Content-Length"},
-// AllowCredentials: true,
-// AllowOriginFunc: func(origin string) bool {
-// 	return origin == "https://github.com"
-// },
-// MaxAge: 12 * time.Hour,

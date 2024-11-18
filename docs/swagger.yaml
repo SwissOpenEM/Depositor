@@ -1,0 +1,23 @@
+info:
+  contact: {}
+  description: Rest API for communication between SciCat frontend and depositor backend.
+    Backend service enables deposition of datasets to OneDep API.
+  title: OpenEm Depositor API
+  version: 1.0.0
+paths:
+  /example/helloworld:
+    get:
+      consumes:
+      - application/json
+      description: do ping
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      summary: ping example
+      tags:
+      - example
+swagger: "2.0"
