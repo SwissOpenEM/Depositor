@@ -56,6 +56,7 @@ type FileUpload struct {
 type DepositionFile struct {
 	DId          string
 	Id           string
+	Name         string
 	Type         string
 	PixelSpacing [3]float32
 	ContourLevel float32
@@ -63,9 +64,9 @@ type DepositionFile struct {
 }
 
 type Deposition struct {
-	Id           string
-	Files        []DepositionFile
-	MetadataFile string
+	Id    string
+	Files []DepositionFile
+	// MetadataFile string
 }
 
 var NeedMeta = []string{"vo-map", "add-map", "half-map", "mask-map"}
