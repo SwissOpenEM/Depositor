@@ -7,12 +7,12 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"tasks/depositions/onedep"
+
+	"github.com/SwissOpenEM/Depositor/depositions/onedep"
 
 	docs "github.com/SwissOpenEM/Depositor/docs"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	middleware "github.com/oapi-codegen/gin-middleware"
 	parser "github.com/osc-em/converter-OSCEM-to-mmCIF/parser"
 	swaggerfiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -224,15 +224,6 @@ func GetVersion(c *gin.Context) {
 
 }
 func main() {
-	swagger, err := GetSwagger()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading swagger spec\n: %s", err)
-		os.Exit(1)
-	}
-
-	// Clear out the servers array in the swagger spec, that skips validating
-	// that server names match. We don't know how this thing will be run.
-	swagger.Servers = nil
 
 	router := gin.Default()
 	router.Use(cors.New(cors.Config{
@@ -245,7 +236,6 @@ func main() {
 
 	docs.SwaggerInfo.BasePath = router.BasePath()
 	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
-	router.Use(middleware.OapiRequestValidator(swagger))
 
 	router.Run("localhost:8080")
 }

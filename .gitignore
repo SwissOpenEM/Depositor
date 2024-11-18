@@ -400,3 +400,5 @@ FodyWeavers.xsd
 
 bearer.jwt
 dist/
+mmcif_pdbx_v50.dic
+conversions.csv
