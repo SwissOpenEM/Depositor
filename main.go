@@ -9,11 +9,13 @@ import (
 	"os"
 	"tasks/depositions/onedep"
 
+	docs "github.com/SwissOpenEM/Depositor/docs"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	middleware "github.com/oapi-codegen/gin-middleware"
 	parser "github.com/osc-em/converter-OSCEM-to-mmCIF/parser"
-	// "github.com/swaggo/gin-swagger" // gin-swagger middleware
-	// swagger embed files
+	swaggerfiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 //	@title			OpenEm Depositor API
@@ -43,6 +45,22 @@ func convertMultipartFileToFile(file multipart.File) (*os.File, error) {
 	return os.Open(tempFile.Name())
 }
 
+// Create handles the creation of a new deposition
+// @Summary Create a new deposition to OneDep
+// @Description Create a new deposition by uploading experiments, files, and metadata to OneDep API.
+// @Tags deposition
+// @Accept multipart/form-data
+// @Produce json
+// @Param email formData string true "User's email"
+// @Param experiments formData string true "Experiment type (e.g., single-particle analysis)"
+// @Param file formData []file true "File(s) to upload" collectionFormat(multi)
+// @Param metadata formData string true "Scientific metadata as a JSON string"
+// @Param fileMetadata formData string true "File metadata as a JSON string"
+// @Success 200 {string} string "Deposition ID"
+// @Failure 400 {object} map[string]interface{} "Error response"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /onedep [post]
+// @Router /onedep [get]
 func Create(c *gin.Context) {
 	err := c.Request.ParseMultipartForm(10 << 20)
 	if err != nil {
@@ -72,7 +90,7 @@ func Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse scientific metadata to JSON."})
 		return
 	}
-	fmt.Println(scientificMetadata)
+
 	// create a temporary cif file that will be used for a deposition
 	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
@@ -108,12 +126,13 @@ func Create(c *gin.Context) {
 	// 	return
 	// }
 	deposition := onedep.Deposition{
-		Id:    "D_800041",
+		Id:    "D_800042",
 		Files: []onedep.DepositionFile{},
 	}
-
+	// text, _ := fmt.Printf("deposition created in OneDep, id %v", deposition.Id)
+	// c.JSON(http.StatusOK, gin.H{"messsage": "deposition created in OneDep"})
 	// fmt.Println("created deposition", deposition.Id)
-
+	var fileDeposited onedep.DepositionFile
 	metadataTracked := false
 	for i, fileHeader := range files {
 		file, err := fileHeader.Open()
@@ -123,7 +142,7 @@ func Create(c *gin.Context) {
 			return
 		}
 		defer file.Close()
-		var fileDeposited onedep.DepositionFile
+
 		if metadataFiles[i].Type == "co-cif" {
 			fileTmp, err := convertMultipartFileToFile(file)
 			if err != nil {
@@ -150,12 +169,11 @@ func Create(c *gin.Context) {
 			}
 			defer file.Close()
 		} else {
-			// fileDeposited, err = onedep.AddFileToDeposition(client, deposition, metadataFiles[i], file)
-			// if err != nil {
-			// 	c.JSON(http.StatusBadRequest, gin.H{"error": err})
-			// 	return
-			// }
-			fmt.Println("skipping..")
+			fileDeposited, err = onedep.AddFileToDeposition(client, deposition, metadataFiles[i], file)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err})
+				return
+			}
 		}
 		deposition.Files = append(deposition.Files, fileDeposited)
 
@@ -174,16 +192,29 @@ func Create(c *gin.Context) {
 			"mmcif_pdbx_v50.dic",
 			fileScientificMetaPath,
 		)
+
+		metadataFile := onedep.FileUpload{
+			Name: "metadata.cif",
+			Type: "co-cif", // FIX ME add aproprioate type once it's implemeted in OneDep API
+		}
+		fileDeposited, err = onedep.AddCIFtoDeposition(client, deposition, metadataFile, fileScientificMetaPath)
+		if err != nil {
+			errText := fmt.Errorf("failed to open temp file with annotated model and scientific metadata: %w", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": errText})
+			return
+		}
+		deposition.Files = append(deposition.Files, fileDeposited)
 	}
-	//FIX ME deposition of metadata file to cif after fix from EBI  (and then remove)
 	//defer os.Remove(fileScientificMetaPath)
 	fmt.Println(fileScientificMetaPath)
+	c.JSON(http.StatusOK, deposition.Id)
 
-	_, err = onedep.ProcesseDeposition(client, deposition)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err})
-		return
-	}
+	// FIX ME uncomment once pixel spacing and contour level are propagated correctly into the request, st files can be processed.
+	// _, err = onedep.ProcesseDeposition(client, deposition)
+	// if err != nil {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": err})
+	// 	return
+	// }
 
 }
 
@@ -193,6 +224,16 @@ func GetVersion(c *gin.Context) {
 
 }
 func main() {
+	swagger, err := GetSwagger()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading swagger spec\n: %s", err)
+		os.Exit(1)
+	}
+
+	// Clear out the servers array in the swagger spec, that skips validating
+	// that server names match. We don't know how this thing will be run.
+	swagger.Servers = nil
+
 	router := gin.Default()
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"http://localhost:4200"},
@@ -201,5 +242,10 @@ func main() {
 	}))
 	router.GET("/version", GetVersion)
 	router.POST("/onedep", Create)
+
+	docs.SwaggerInfo.BasePath = router.BasePath()
+	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
+	router.Use(middleware.OapiRequestValidator(swagger))
+
 	router.Run("localhost:8080")
 }

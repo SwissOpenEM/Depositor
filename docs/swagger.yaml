@@ -5,19 +5,113 @@ info:
   title: OpenEm Depositor API
   version: 1.0.0
 paths:
-  /example/helloworld:
+  /onedep:
     get:
       consumes:
-      - application/json
-      description: do ping
+      - multipart/form-data
+      description: Create a new deposition by uploading experiments, files, and metadata
+        to OneDep API.
+      parameters:
+      - description: User's email
+        in: formData
+        name: email
+        required: true
+        type: string
+      - description: Experiment type (e.g., single-particle analysis)
+        in: formData
+        name: experiments
+        required: true
+        type: string
+      - collectionFormat: multi
+        description: File(s) to upload
+        in: formData
+        items:
+          type: file
+        name: file
+        required: true
+        type: array
+      - description: Scientific metadata as a JSON string
+        in: formData
+        name: metadata
+        required: true
+        type: string
+      - description: File metadata as a JSON string
+        in: formData
+        name: fileMetadata
+        required: true
+        type: string
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Deposition ID
           schema:
             type: string
-      summary: ping example
+        "400":
+          description: Error response
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a new deposition to OneDep
       tags:
-      - example
+      - deposition
+    post:
+      consumes:
+      - multipart/form-data
+      description: Create a new deposition by uploading experiments, files, and metadata
+        to OneDep API.
+      parameters:
+      - description: User's email
+        in: formData
+        name: email
+        required: true
+        type: string
+      - description: Experiment type (e.g., single-particle analysis)
+        in: formData
+        name: experiments
+        required: true
+        type: string
+      - collectionFormat: multi
+        description: File(s) to upload
+        in: formData
+        items:
+          type: file
+        name: file
+        required: true
+        type: array
+      - description: Scientific metadata as a JSON string
+        in: formData
+        name: metadata
+        required: true
+        type: string
+      - description: File metadata as a JSON string
+        in: formData
+        name: fileMetadata
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Deposition ID
+          schema:
+            type: string
+        "400":
+          description: Error response
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a new deposition to OneDep
+      tags:
+      - deposition
 swagger: "2.0"
