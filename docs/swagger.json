@@ -4,11 +4,11 @@
         "description": "Rest API for communication between SciCat frontend and depositor backend. Backend service enables deposition of datasets to OneDep API.",
         "title": "OpenEm Depositor API",
         "contact": {},
-        "version": "1.0.0"
+        "version": "api/v1"
     },
     "paths": {
         "/onedep": {
-            "get": {
+            "post": {
                 "description": "Create a new deposition by uploading experiments, files, and metadata to OneDep API.",
                 "consumes": [
                     "multipart/form-data"
@@ -83,63 +83,21 @@
                         }
                     }
                 }
-            },
-            "post": {
+            }
+        },
+        "/version": {
+            "get": {
                 "description": "Create a new deposition by uploading experiments, files, and metadata to OneDep API.",
-                "consumes": [
-                    "multipart/form-data"
-                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "deposition"
+                    "version"
                 ],
-                "summary": "Create a new deposition to OneDep",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User's email",
-                        "name": "email",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Experiment type (e.g., single-particle analysis)",
-                        "name": "experiments",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "file"
-                        },
-                        "collectionFormat": "multi",
-                        "description": "File(s) to upload",
-                        "name": "file",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Scientific metadata as a JSON string",
-                        "name": "metadata",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "File metadata as a JSON string",
-                        "name": "fileMetadata",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
+                "summary": "Return current version",
                 "responses": {
                     "200": {
-                        "description": "Deposition ID",
+                        "description": "Depositior version",
                         "schema": {
                             "type": "string"
                         }

@@ -19,7 +19,7 @@ import (
 )
 
 //	@title			OpenEm Depositor API
-//	@version		1.0.0
+//	@version		api/v1
 //	@description	Rest API for communication between SciCat frontend and depositor backend. Backend service enables deposition of datasets to OneDep API.
 
 var version string = "DEV"
@@ -60,7 +60,6 @@ func convertMultipartFileToFile(file multipart.File) (*os.File, error) {
 // @Failure 400 {object} map[string]interface{} "Error response"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /onedep [post]
-// @Router /onedep [get]
 func Create(c *gin.Context) {
 	err := c.Request.ParseMultipartForm(10 << 20)
 	if err != nil {
@@ -115,20 +114,20 @@ func Create(c *gin.Context) {
 		Country:     "United States", // temporarily
 		Experiments: experiments,
 	}
-	fmt.Println(depData)
+	// fmt.Println(depData)
 	client := &http.Client{}
 
-	// deposition, err := onedep.CreateDeposition(client, depData)
-	// if err != nil {
-	// 	errText := fmt.Errorf("failed to create deposition: %w", err)
-	// 	fmt.Println(err)
-	// 	c.JSON(http.StatusBadRequest, gin.H{"error": errText})
-	// 	return
-	// }
-	deposition := onedep.Deposition{
-		Id:    "D_800042",
-		Files: []onedep.DepositionFile{},
+	deposition, err := onedep.CreateDeposition(client, depData)
+	if err != nil {
+		errText := fmt.Errorf("failed to create deposition: %w", err)
+		fmt.Println(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": errText})
+		return
 	}
+	// deposition := onedep.Deposition{
+	// 	Id:    "D_800042",
+	// 	Files: []onedep.DepositionFile{},
+	// }
 	// text, _ := fmt.Printf("deposition created in OneDep, id %v", deposition.Id)
 	// c.JSON(http.StatusOK, gin.H{"messsage": "deposition created in OneDep"})
 	// fmt.Println("created deposition", deposition.Id)
@@ -218,7 +217,16 @@ func Create(c *gin.Context) {
 
 }
 
-// GetVersion returns the version of current backend
+//	returns the current version of the depositor
+//
+// @Summary Return current version
+// @Description Create a new deposition by uploading experiments, files, and metadata to OneDep API.
+// @Tags version
+// @Produce json
+// @Success 200 {string} string "Depositior version"
+// @Failure 400 {object} map[string]interface{} "Error response"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /version [get]
 func GetVersion(c *gin.Context) {
 	c.JSON(http.StatusOK, version)
 
@@ -231,11 +239,12 @@ func main() {
 		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept"},
 	}))
-	router.GET("/version", GetVersion)
-	router.POST("/onedep", Create)
 
 	docs.SwaggerInfo.BasePath = router.BasePath()
 	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
+
+	router.GET("/version", GetVersion)
+	router.POST("/onedep", Create)
 
 	router.Run("localhost:8080")
 }
