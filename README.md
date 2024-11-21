@@ -23,7 +23,7 @@ Service is running on localhost:8080 and is using the [frontend](https://github.
 
 From the frontend perspective only datasets, that have an OpenEm keyword, will get an access to the depositor backend and UI.
 
-OpenAPI v3.0 specs are available at localhost:8080/docs/index.html, once service is runnning. 
+REST API.deinition based on OpenAPI v3.0 specs are available at localhost:8080/docs/index.html, once service is runnning. 
 ## Limitations
 * `depositions/onedep/config.go` defined the base URL, to which requests will be sent to create deposition, add files and files metadata. Currently only a [test server](https://onedep-depui-test.wwpdb.org/) for OneDep is used. Once, the API is rolled out in the production (https://deposit-pdbe.wwpdb.org/deposition/ in Europe), this will then be changed. 
 * Additional Endpoint will be implemented to create deposition in EMPIAR for raw datasets. This is expected by March 2025, as described on our [Project Timeline](https://swissopenem.github.io/timeline/).
