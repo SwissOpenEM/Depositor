@@ -12,6 +12,14 @@ const (
 	numberOfWords = 56
 )
 
+type RequestCreate struct {
+	Email    string   `json:"email" binding:"required,email"`
+	OrcidIds []string `json:"orcidIds" binding:"required"`
+	Country  string   `json:"country" binding:"required"`
+	Method   string   `json:"method" binding:"required"`
+	JWTToken string   `json:"jwtToken" binding:"required"`
+}
+
 type EmMethod struct {
 	Type    string `json:"type"`
 	Subtype string `json:"subtype,omitempty"`
@@ -36,6 +44,7 @@ type UserInfo struct {
 	Users       []string   `json:"users"`
 	Country     string     `json:"country"`
 	Experiments []EmMethod `json:"experiments"`
+	Password    string     `json:"password,omitempty"`
 }
 
 //	type UserInput struct {

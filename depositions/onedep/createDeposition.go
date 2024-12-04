@@ -76,7 +76,7 @@ func getMeta(file multipart.File) ([3]float32, error) {
 }
 
 // sends a request to OneDep to create a new deposition
-func CreateDeposition(client *http.Client, userInput UserInfo) (Deposition, error) {
+func CreateDeposition(client *http.Client, userInput UserInfo, token string) (Deposition, error) {
 	var deposition Deposition
 	// Convert the user input to JSON
 	jsonInput, err := json.Marshal(userInput)
@@ -89,12 +89,7 @@ func CreateDeposition(client *http.Client, userInput UserInfo) (Deposition, erro
 		return deposition, fmt.Errorf("error sending request to url %v: %v", url, err)
 	}
 
-	jwtToken, err := os.ReadFile("bearer.jwt")
-	if err != nil {
-		return deposition, fmt.Errorf("error reading jwt: %v", err)
-	}
-	var bearer = "Bearer " + string(jwtToken)
-	req.Header.Add("Authorization", bearer)
+	req.Header.Add("Authorization", "Bearer "+token)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
@@ -119,7 +114,8 @@ func CreateDeposition(client *http.Client, userInput UserInfo) (Deposition, erro
 	return deposition, nil
 }
 
-func Both(deposition Deposition, fileUpload FileUpload) (DepositionFile, *bytes.Buffer, *multipart.Writer, error) {
+// prepare deposition instance, body request and multipart writer
+func prepareDeposition(deposition Deposition, fileUpload FileUpload) (DepositionFile, *bytes.Buffer, *multipart.Writer, error) {
 	var fD DepositionFile
 	fD.DId = deposition.Id
 	fD.Name = fileUpload.Name
@@ -142,8 +138,8 @@ func Both(deposition Deposition, fileUpload FileUpload) (DepositionFile, *bytes.
 }
 
 // sends a request to OneDep to add files to an existing deposition with id
-func AddCIFtoDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file string) (DepositionFile, error) {
-	fD, body, writer, err := Both(deposition, fileUpload)
+func AddCIFtoDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file string, token string) (DepositionFile, error) {
+	fD, body, writer, err := prepareDeposition(deposition, fileUpload)
 	if err != nil {
 		return fD, err
 	}
@@ -170,12 +166,12 @@ func AddCIFtoDeposition(client *http.Client, deposition Deposition, fileUpload F
 		return fD, err
 	}
 
-	return UploadFile(client, fD, body, writer)
+	return UploadFile(client, fD, body, writer, token)
 }
 
 // sends a request to OneDep to add multipart files to an existing deposition with id
-func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file multipart.File) (DepositionFile, error) {
-	fD, body, writer, err := Both(deposition, fileUpload)
+func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file multipart.File, token string) (DepositionFile, error) {
+	fD, body, writer, err := prepareDeposition(deposition, fileUpload)
 	if err != nil {
 		return fD, err
 	}
@@ -206,10 +202,10 @@ func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload 
 	if err != nil {
 		return fD, err
 	}
-	return UploadFile(client, fD, body, writer)
+	return UploadFile(client, fD, body, writer, token)
 }
 
-func UploadFile(client *http.Client, fD DepositionFile, body *bytes.Buffer, writer *multipart.Writer) (DepositionFile, error) {
+func UploadFile(client *http.Client, fD DepositionFile, body *bytes.Buffer, writer *multipart.Writer, token string) (DepositionFile, error) {
 
 	// Prepare the request
 	url := baseURL + fD.DId + "/files/"
@@ -218,13 +214,7 @@ func UploadFile(client *http.Client, fD DepositionFile, body *bytes.Buffer, writ
 		return fD, err
 	}
 
-	jwtToken, err := os.ReadFile("bearer.jwt")
-	if err != nil {
-		return fD, fmt.Errorf("error reading jwt: %v", err)
-	}
-	var bearer = "Bearer " + string(jwtToken)
-
-	req.Header.Add("Authorization", bearer)
+	req.Header.Add("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	// Send the request
@@ -250,7 +240,7 @@ func UploadFile(client *http.Client, fD DepositionFile, body *bytes.Buffer, writ
 }
 
 // sends a request to OneDep to add files to an existing deposition with id
-func AddMetadataToFile(client *http.Client, fD DepositionFile) (DepositionFile, error) {
+func AddMetadataToFile(client *http.Client, fD DepositionFile, token string) (DepositionFile, error) {
 
 	// Prepare metadata request
 	data := map[string]interface{}{
@@ -275,13 +265,8 @@ func AddMetadataToFile(client *http.Client, fD DepositionFile) (DepositionFile, 
 	if err != nil {
 		return fD, err
 	}
-	jwtToken, err := os.ReadFile("bearer.jwt")
-	if err != nil {
-		return fD, fmt.Errorf("error reading jwt: %v", err)
-	}
-	var bearer = "Bearer " + string(jwtToken)
 
-	req.Header.Add("Authorization", bearer)
+	req.Header.Add("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
 	// Send the request
@@ -303,17 +288,12 @@ func AddMetadataToFile(client *http.Client, fD DepositionFile) (DepositionFile, 
 }
 
 // sends a request to OneDep to process a  deposition
-func ProcesseDeposition(client *http.Client, deposition Deposition) (string, error) {
+func ProcessDeposition(client *http.Client, deposition Deposition, token string) (string, error) {
 
 	url := baseURL + deposition.Id + "process"
 	req, _ := http.NewRequest("POST", url, new(bytes.Buffer))
 
-	jwtToken, err := os.ReadFile("bearer.jwt")
-	if err != nil {
-		return "", fmt.Errorf("error reading jwt: %v", err)
-	}
-	var bearer = "Bearer " + string(jwtToken)
-	req.Header.Add("Authorization", bearer)
+	req.Header.Add("Authorization", "Bearer "+token)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
