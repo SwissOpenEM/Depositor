@@ -55,9 +55,8 @@ type UserInfo struct {
 //		Files       []FileUpload `json:"files"`
 //	}
 type FileUpload struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-	// File    string  `json:"file"`
+	Name    string  `json:"name"`
+	Type    string  `json:"type"`
 	Contour float32 `json:"contour"`
 	Details string  `json:"details"`
 }

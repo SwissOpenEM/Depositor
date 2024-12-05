@@ -115,9 +115,9 @@ func CreateDeposition(client *http.Client, userInput UserInfo, token string) (De
 }
 
 // prepare deposition instance, body request and multipart writer
-func prepareDeposition(deposition Deposition, fileUpload FileUpload) (DepositionFile, *bytes.Buffer, *multipart.Writer, error) {
+func prepareDeposition(deposition string, fileUpload FileUpload) (DepositionFile, *bytes.Buffer, *multipart.Writer, error) {
 	var fD DepositionFile
-	fD.DId = deposition.Id
+	fD.DId = deposition
 	fD.Name = fileUpload.Name
 	fD.Type = fileUpload.Type
 	fD.ContourLevel = fileUpload.Contour
@@ -138,7 +138,7 @@ func prepareDeposition(deposition Deposition, fileUpload FileUpload) (Deposition
 }
 
 // sends a request to OneDep to add files to an existing deposition with id
-func AddCIFtoDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file string, token string) (DepositionFile, error) {
+func AddCIFtoDeposition(client *http.Client, deposition string, fileUpload FileUpload, file string, token string) (DepositionFile, error) {
 	fD, body, writer, err := prepareDeposition(deposition, fileUpload)
 	if err != nil {
 		return fD, err
@@ -170,7 +170,7 @@ func AddCIFtoDeposition(client *http.Client, deposition Deposition, fileUpload F
 }
 
 // sends a request to OneDep to add multipart files to an existing deposition with id
-func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file multipart.File, token string) (DepositionFile, error) {
+func AddFileToDeposition(client *http.Client, deposition string, fileUpload FileUpload, file multipart.File, token string) (DepositionFile, error) {
 	fD, body, writer, err := prepareDeposition(deposition, fileUpload)
 	if err != nil {
 		return fD, err
