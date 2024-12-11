@@ -147,7 +147,21 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Deposition ID to which a file should be uploaded",
-                        "name": "depositionID",
+                        "name": "depID",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "JWT token for OneDep API",
+                        "name": "jwtToken",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File metadata as a JSON string",
+                        "name": "ScientificMetadata",
                         "in": "formData",
                         "required": true
                     }
@@ -191,23 +205,19 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Deposition ID to which a file should be uploaded",
-                        "name": "depositionID",
+                        "name": "depID",
                         "in": "formData",
                         "required": true
                     },
                     {
                         "type": "string",
                         "description": "JWT token for OneDep API",
-                        "name": "token",
+                        "name": "jwtToken",
                         "in": "formData",
                         "required": true
                     },
                     {
-                        "type": "array",
-                        "items": {
-                            "type": "file"
-                        },
-                        "collectionFormat": "multi",
+                        "type": "file",
                         "description": "File to upload",
                         "name": "file",
                         "in": "formData",
@@ -216,7 +226,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "File metadata as a JSON string",
-                        "name": "fileMetadata",
+                        "name": "ScientificMetadata",
                         "in": "formData",
                         "required": true
                     }
@@ -260,14 +270,14 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Deposition ID to which a file should be uploaded",
-                        "name": "depositionID",
+                        "name": "depID",
                         "in": "formData",
                         "required": true
                     },
                     {
                         "type": "string",
                         "description": "JWT token for OneDep API",
-                        "name": "token",
+                        "name": "jwtToken",
                         "in": "formData",
                         "required": true
                     }

@@ -137,7 +137,17 @@ paths:
       parameters:
       - description: Deposition ID to which a file should be uploaded
         in: formData
-        name: depositionID
+        name: depID
+        required: true
+        type: string
+      - description: JWT token for OneDep API
+        in: formData
+        name: jwtToken
+        required: true
+        type: string
+      - description: File metadata as a JSON string
+        in: formData
+        name: ScientificMetadata
         required: true
         type: string
       produces:
@@ -166,25 +176,22 @@ paths:
       parameters:
       - description: Deposition ID to which a file should be uploaded
         in: formData
-        name: depositionID
+        name: depID
         required: true
         type: string
       - description: JWT token for OneDep API
         in: formData
-        name: token
+        name: jwtToken
         required: true
         type: string
-      - collectionFormat: multi
-        description: File to upload
+      - description: File to upload
         in: formData
-        items:
-          type: file
         name: file
         required: true
-        type: array
+        type: file
       - description: File metadata as a JSON string
         in: formData
-        name: fileMetadata
+        name: ScientificMetadata
         required: true
         type: string
       produces:
@@ -213,12 +220,12 @@ paths:
       parameters:
       - description: Deposition ID to which a file should be uploaded
         in: formData
-        name: depositionID
+        name: depID
         required: true
         type: string
       - description: JWT token for OneDep API
         in: formData
-        name: token
+        name: jwtToken
         required: true
         type: string
       produces:

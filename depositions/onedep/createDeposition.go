@@ -62,6 +62,7 @@ func decodeResponse(resp *http.Response) ResponseType {
 			Message: err.Error(),
 		}
 	}
+	fmt.Println(rOneDep.Extras)
 	return ResponseType{
 		Status:  rOneDep.Code,
 		Message: fmt.Sprintf(rOneDep.Message),
@@ -154,7 +155,6 @@ func prepareFileDeposition(deposition string, fileUpload FileUpload) (Deposition
 	fD.ContourLevel = fileUpload.Contour
 	fD.Details = fileUpload.Details
 
-	fmt.Println(fD)
 	// create body
 	body := new(bytes.Buffer)
 	writer := multipart.NewWriter(body)
@@ -290,6 +290,7 @@ func UploadFile(client *http.Client, fD DepositionFile, body *bytes.Buffer, writ
 	defer resp.Body.Close()
 	if resp.StatusCode == 200 || resp.StatusCode == 201 {
 		fD.Id, err = decodeFid(resp)
+
 		if err != nil {
 			return fD, &ResponseType{
 				Status:  "decoding_error",
@@ -322,7 +323,10 @@ func AddMetadataToFile(client *http.Client, fD DepositionFile, token string) (De
 
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
-		fmt.Println("Error marshaling JSON:", err)
+		return fD, &ResponseType{
+			Status:  "JSON_error",
+			Message: err.Error(),
+		}
 	}
 	urlFileMeta := baseURL + fD.DId + "/files/" + fD.Id + "/metadata"
 	req, err := http.NewRequest("POST", urlFileMeta, bytes.NewBuffer(jsonBody))
