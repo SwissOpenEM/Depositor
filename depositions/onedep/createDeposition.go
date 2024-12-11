@@ -62,7 +62,7 @@ func decodeResponse(resp *http.Response) ResponseType {
 			Message: err.Error(),
 		}
 	}
-	fmt.Println(rOneDep.Extras)
+	// fmt.Println(rOneDep.Extras) // for debugging
 	return ResponseType{
 		Status:  rOneDep.Code,
 		Message: fmt.Sprintf(rOneDep.Message),

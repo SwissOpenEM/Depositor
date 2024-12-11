@@ -61,7 +61,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/onedep/:depID/file": {
+        "/onedep/{depID}/file": {
             "post": {
                 "description": "Uploading file, and metadata to OneDep API.",
                 "consumes": [
@@ -79,7 +79,7 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Deposition ID to which a file should be uploaded",
                         "name": "depID",
-                        "in": "formData",
+                        "in": "path",
                         "required": true
                     },
                     {
@@ -130,7 +130,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/onedep/:depID/metadata": {
+        "/onedep/{depID}/metadata": {
             "post": {
                 "description": "Uploading metadata file to OneDep API. This is created by parsing the JSON metadata into the converter.",
                 "consumes": [
@@ -148,7 +148,7 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Deposition ID to which a file should be uploaded",
                         "name": "depID",
-                        "in": "formData",
+                        "in": "path",
                         "required": true
                     },
                     {
@@ -161,7 +161,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "File metadata as a JSON string",
-                        "name": "ScientificMetadata",
+                        "name": "scientificMetadata",
                         "in": "formData",
                         "required": true
                     }
@@ -188,7 +188,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/onedep/:depID/pdb": {
+        "/onedep/{depID}/pdb": {
             "post": {
                 "description": "Uploading file to OneDep API.",
                 "consumes": [
@@ -206,7 +206,7 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Deposition ID to which a file should be uploaded",
                         "name": "depID",
-                        "in": "formData",
+                        "in": "path",
                         "required": true
                     },
                     {
@@ -226,7 +226,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "File metadata as a JSON string",
-                        "name": "ScientificMetadata",
+                        "name": "scientificMetadata",
                         "in": "formData",
                         "required": true
                     }
@@ -253,7 +253,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/onedep/:depID/process": {
+        "/onedep/{depID}/process": {
             "post": {
                 "description": "Process a deposition in OneDep API.",
                 "consumes": [
@@ -271,7 +271,7 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Deposition ID to which a file should be uploaded",
                         "name": "depID",
-                        "in": "formData",
+                        "in": "path",
                         "required": true
                     },
                     {

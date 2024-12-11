@@ -80,14 +80,14 @@ paths:
       summary: Create a new deposition to OneDep
       tags:
       - deposition
-  /onedep/:depID/file:
+  /onedep/{depID}/file:
     post:
       consumes:
       - multipart/form-data
       description: Uploading file, and metadata to OneDep API.
       parameters:
       - description: Deposition ID to which a file should be uploaded
-        in: formData
+        in: path
         name: depID
         required: true
         type: string
@@ -128,7 +128,7 @@ paths:
         in OneDep
       tags:
       - deposition
-  /onedep/:depID/metadata:
+  /onedep/{depID}/metadata:
     post:
       consumes:
       - application/json
@@ -136,7 +136,7 @@ paths:
         the JSON metadata into the converter.
       parameters:
       - description: Deposition ID to which a file should be uploaded
-        in: formData
+        in: path
         name: depID
         required: true
         type: string
@@ -147,7 +147,7 @@ paths:
         type: string
       - description: File metadata as a JSON string
         in: formData
-        name: ScientificMetadata
+        name: scientificMetadata
         required: true
         type: string
       produces:
@@ -168,14 +168,14 @@ paths:
       summary: Add a cif file with metadata to deposition in OneDep
       tags:
       - deposition
-  /onedep/:depID/pdb:
+  /onedep/{depID}/pdb:
     post:
       consumes:
       - multipart/form-data
       description: Uploading file to OneDep API.
       parameters:
       - description: Deposition ID to which a file should be uploaded
-        in: formData
+        in: path
         name: depID
         required: true
         type: string
@@ -191,7 +191,7 @@ paths:
         type: file
       - description: File metadata as a JSON string
         in: formData
-        name: ScientificMetadata
+        name: scientificMetadata
         required: true
         type: string
       produces:
@@ -212,14 +212,14 @@ paths:
       summary: Add coordinates and description to deposition in OneDep
       tags:
       - deposition
-  /onedep/:depID/process:
+  /onedep/{depID}/process:
     post:
       consumes:
       - application/json
       description: Process a deposition in OneDep API.
       parameters:
       - description: Deposition ID to which a file should be uploaded
-        in: formData
+        in: path
         name: depID
         required: true
         type: string
