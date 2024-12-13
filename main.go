@@ -188,49 +188,42 @@ func AddFile(c *gin.Context) {
 // @Summary Add a cif file with metadata to deposition in OneDep
 // @Description Uploading metadata file to OneDep API. This is created by parsing the JSON metadata into the converter.
 // @Tags deposition
-// @Accept application/json
+// @Accept multipart/form-data
 // @Produce json
 // @Param depID path string true "Deposition ID to which a file should be uploaded"
 // @Param jwtToken formData string true "JWT token for OneDep API"
-// @Param scientificMetadata formData string true "File metadata as a JSON string"
+// @Param scientificMetadata formData string true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
 // @Success 200 {object} onedep.UploadedFile "File ID"
 // @Failure 400 {object} onedep.ResponseType "Error response"
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
 // @Router /onedep/{depID}/metadata [post]
 func AddMetadata(c *gin.Context) {
+
+	err := c.Request.ParseMultipartForm(10 << 20)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Failed to parse Form data.",
+		})
+		return
+	}
+
 	depID := c.Param("depID")
 	bearer := c.PostForm("jwtToken")
-	var body map[string]interface{}
 
-	// Bind JSON payload to the struct
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "body_invalid",
-			"message": err.Error(),
-		})
-		return
-	}
-
-	token, ok := body["jwtToken"].(string)
-	if !ok || token == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "token_invalid",
-			"message": "Missing or invalid jwtToken",
-		})
-		return
-	}
 	// FIX ME add a OSCEM SCHEMA
-	metadataStr, ok := body["scientificMetadata"].(string)
-	if !ok || metadataStr == "{}" {
+	// Extract entries from multipart form
+	metadataStr := c.PostForm("scientificMetadata")
+	if metadataStr == "{}" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "body_invalid",
-			"message": "Missing or invalid metadata",
+			"message": "Missing scientific metadata.",
 		})
 		return
 	}
 	// Parse  JSON string into the Metadata
 	var scientificMetadata map[string]any
-	err := json.Unmarshal([]byte(metadataStr), &scientificMetadata)
+	err = json.Unmarshal([]byte(metadataStr), &scientificMetadata)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "body_invalid",
@@ -281,7 +274,7 @@ func AddMetadata(c *gin.Context) {
 // @Param depID path string true "Deposition ID to which a file should be uploaded"
 // @Param jwtToken formData string true "JWT token for OneDep API"
 // @Param file formData file true "File to upload"
-// @Param scientificMetadata formData string true "File metadata as a JSON string"
+// @Param scientificMetadata formData string true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
 // @Success 200 {object} onedep.UploadedFile "File ID"
 // @Failure 400 {object} onedep.ResponseType "Error response"
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
@@ -389,7 +382,6 @@ func AddCoordinates(c *gin.Context) {
 		return
 	}
 	defer file.Close()
-
 	// add in web UI no such fields for coordinates
 
 	// if fileMetadata.Details != "" {

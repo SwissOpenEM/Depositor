@@ -134,7 +134,7 @@ const docTemplate = `{
             "post": {
                 "description": "Uploading metadata file to OneDep API. This is created by parsing the JSON metadata into the converter.",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -160,7 +160,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "File metadata as a JSON string",
+                        "description": "Scientific metadata as a JSON string; expects elements from OSCEM on the top level",
                         "name": "scientificMetadata",
                         "in": "formData",
                         "required": true
@@ -225,7 +225,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "File metadata as a JSON string",
+                        "description": "Scientific metadata as a JSON string; expects elements from OSCEM on the top level",
                         "name": "scientificMetadata",
                         "in": "formData",
                         "required": true

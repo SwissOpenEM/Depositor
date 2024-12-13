@@ -131,7 +131,7 @@ paths:
   /onedep/{depID}/metadata:
     post:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Uploading metadata file to OneDep API. This is created by parsing
         the JSON metadata into the converter.
       parameters:
@@ -145,7 +145,8 @@ paths:
         name: jwtToken
         required: true
         type: string
-      - description: File metadata as a JSON string
+      - description: Scientific metadata as a JSON string; expects elements from OSCEM
+          on the top level
         in: formData
         name: scientificMetadata
         required: true
@@ -189,7 +190,8 @@ paths:
         name: file
         required: true
         type: file
-      - description: File metadata as a JSON string
+      - description: Scientific metadata as a JSON string; expects elements from OSCEM
+          on the top level
         in: formData
         name: scientificMetadata
         required: true
