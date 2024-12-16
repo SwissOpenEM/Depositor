@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/SwissOpenEM/Depositor/depositions/onedep"
 
@@ -193,6 +194,7 @@ func AddFile(c *gin.Context) {
 // @Param depID path string true "Deposition ID to which a file should be uploaded"
 // @Param jwtToken formData string true "JWT token for OneDep API"
 // @Param scientificMetadata formData string true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
+// @Param downloadCif formData boolean false "Download newly created mmCIF with metadata"
 // @Success 200 {object} onedep.UploadedFile "File ID"
 // @Failure 400 {object} onedep.ResponseType "Error response"
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
@@ -210,7 +212,18 @@ func AddMetadata(c *gin.Context) {
 
 	depID := c.Param("depID")
 	bearer := c.PostForm("jwtToken")
+	downloadCifStr := c.PostForm("downloadCif")
 
+	// Parse the string into a boolean
+	downloadCif, err := strconv.ParseBool(downloadCifStr)
+	if err != nil {
+		// Handle invalid boolean input
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Invalid value for downloadCif. Expected 'true' or 'false'.",
+		})
+		return
+	}
 	// FIX ME add a OSCEM SCHEMA
 	// Extract entries from multipart form
 	metadataStr := c.PostForm("scientificMetadata")
@@ -261,7 +274,11 @@ func AddMetadata(c *gin.Context) {
 		return
 	}
 
-	//defer os.Remove(fileScientificMetaPath)
+	if downloadCif {
+		c.FileAttachment(fileScientificMetaPath, "metadata.cif")
+	}
+	defer os.Remove(fileScientificMetaPath)
+
 	c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
 }
 
@@ -275,6 +292,7 @@ func AddMetadata(c *gin.Context) {
 // @Param jwtToken formData string true "JWT token for OneDep API"
 // @Param file formData file true "File to upload"
 // @Param scientificMetadata formData string true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
+// @Param downloadCif formData boolean false "Download newly created mmCIF combining metadata and model information"
 // @Success 200 {object} onedep.UploadedFile "File ID"
 // @Failure 400 {object} onedep.ResponseType "Error response"
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
@@ -293,6 +311,18 @@ func AddCoordinates(c *gin.Context) {
 	bearer := c.PostForm("jwtToken")
 	fileHeader := c.Request.MultipartForm.File["file"][0] //file
 
+	downloadCifStr := c.PostForm("downloadCif")
+
+	// Parse the string into a boolean
+	downloadCif, err := strconv.ParseBool(downloadCifStr)
+	if err != nil {
+		// Handle invalid boolean input
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Invalid value for downloadCif. Expected 'true' or 'false'.",
+		})
+		return
+	}
 	// metadataFilesStr := c.PostForm("fileMetadata") //files Metadata
 	// if metadataFilesStr == "{}" {
 	// 	c.JSON(http.StatusBadRequest, gin.H{
@@ -392,10 +422,15 @@ func AddCoordinates(c *gin.Context) {
 	// 	}
 	// 	c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
 	// }
+
+	if downloadCif {
+		c.FileAttachment(fileScientificMetaPath, "metadata.cif")
+	}
+	defer os.Remove(fileScientificMetaPath)
+
 	c.JSON(http.StatusOK, gin.H{
 		"depID":  depID,
 		"fileID": fileDeposited.Id,
-		// "path": fileScientificMetaPath
 	})
 }
 

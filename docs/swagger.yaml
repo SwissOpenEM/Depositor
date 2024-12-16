@@ -151,6 +151,10 @@ paths:
         name: scientificMetadata
         required: true
         type: string
+      - description: Download newly created mmCIF with metadata
+        in: formData
+        name: downloadCif
+        type: boolean
       produces:
       - application/json
       responses:
@@ -196,6 +200,10 @@ paths:
         name: scientificMetadata
         required: true
         type: string
+      - description: Download newly created mmCIF combining metadata and model information
+        in: formData
+        name: downloadCif
+        type: boolean
       produces:
       - application/json
       responses:

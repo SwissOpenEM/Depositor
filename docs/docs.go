@@ -164,6 +164,12 @@ const docTemplate = `{
                         "name": "scientificMetadata",
                         "in": "formData",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Download newly created mmCIF with metadata",
+                        "name": "downloadCif",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
@@ -229,6 +235,12 @@ const docTemplate = `{
                         "name": "scientificMetadata",
                         "in": "formData",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Download newly created mmCIF combining metadata and model information",
+                        "name": "downloadCif",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
