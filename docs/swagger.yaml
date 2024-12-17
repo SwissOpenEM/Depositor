@@ -151,10 +151,6 @@ paths:
         name: scientificMetadata
         required: true
         type: string
-      - description: Download newly created mmCIF with metadata
-        in: formData
-        name: downloadCif
-        type: boolean
       produces:
       - application/json
       responses:
@@ -200,10 +196,6 @@ paths:
         name: scientificMetadata
         required: true
         type: string
-      - description: Download newly created mmCIF combining metadata and model information
-        in: formData
-        name: downloadCif
-        type: boolean
       produces:
       - application/json
       responses:
@@ -254,6 +246,73 @@ paths:
           schema:
             $ref: '#/definitions/onedep.ResponseType'
       summary: Process deposition to OneDep
+      tags:
+      - deposition
+  /onedep/metadata:
+    post:
+      consumes:
+      - application/json
+      description: Downloading a metadata file. Invokes converter and starts download.
+      parameters:
+      - description: Scientific metadata as a JSON string; expects elements from OSCEM
+          on the top level
+        in: body
+        name: scientificMetadata
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Error response
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+      summary: Get a cif file with metadata for manual deposition in OneDep
+      tags:
+      - deposition
+  /onedep/pdb:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Downloading a metadata file. Invokes converter and starts download.
+      parameters:
+      - description: Scientific metadata as a JSON string; expects elements from OSCEM
+          on the top level
+        in: formData
+        name: scientificMetadata
+        required: true
+        type: string
+      - description: File to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Error response
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+      summary: Get a cif file with metadata and coordinates for manual deposition
+        in OneDep
       tags:
       - deposition
   /version:

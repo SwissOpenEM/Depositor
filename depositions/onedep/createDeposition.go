@@ -9,7 +9,6 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
-	"os"
 )
 
 // extracts the id of the deposition from the response
@@ -167,53 +166,6 @@ func prepareFileDeposition(deposition string, fileUpload FileUpload) (Deposition
 		return fD, body, writer, err
 	}
 	return fD, body, writer, err
-}
-
-// sends a request to OneDep to add files to an existing deposition with id
-func AddCIFtoDeposition(client *http.Client, deposition string, fileUpload FileUpload, file string, token string) (DepositionFile, *ResponseType) {
-	fD, body, writer, err := prepareFileDeposition(deposition, fileUpload)
-	if err != nil {
-		return fD, &ResponseType{
-			Status:  "request_body_issue",
-			Message: err.Error(),
-		}
-	}
-	// open file
-	cifFile, err := os.Open(file)
-	if err != nil {
-		return fD, &ResponseType{
-			Status:  "cif_file_issue",
-			Message: err.Error(),
-		}
-	}
-	defer cifFile.Close()
-
-	//upload files
-	part, err := writer.CreateFormFile("file", fD.Name)
-	if err != nil {
-		return fD, &ResponseType{
-			Status:  "request_form_issue",
-			Message: err.Error(),
-		}
-	}
-
-	_, err = io.Copy(part, cifFile)
-	if err != nil {
-		return fD, &ResponseType{
-			Status:  "request_form_issue",
-			Message: err.Error(),
-		}
-	}
-
-	err = writer.Close()
-	if err != nil {
-		return fD, &ResponseType{
-			Status:  "request_form_issue",
-			Message: err.Error(),
-		}
-	}
-
-	return UploadFile(client, fD, body, writer, token)
 }
 
 // sends a request to OneDep to add multipart files to an existing deposition with id

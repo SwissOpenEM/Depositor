@@ -61,6 +61,103 @@ const docTemplate = `{
                 }
             }
         },
+        "/onedep/metadata": {
+            "post": {
+                "description": "Downloading a metadata file. Invokes converter and starts download.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "deposition"
+                ],
+                "summary": "Get a cif file with metadata for manual deposition in OneDep",
+                "parameters": [
+                    {
+                        "description": "Scientific metadata as a JSON string; expects elements from OSCEM on the top level",
+                        "name": "scientificMetadata",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    }
+                }
+            }
+        },
+        "/onedep/pdb": {
+            "post": {
+                "description": "Downloading a metadata file. Invokes converter and starts download.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "deposition"
+                ],
+                "summary": "Get a cif file with metadata and coordinates for manual deposition in OneDep",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Scientific metadata as a JSON string; expects elements from OSCEM on the top level",
+                        "name": "scientificMetadata",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "File to upload",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    }
+                }
+            }
+        },
         "/onedep/{depID}/file": {
             "post": {
                 "description": "Uploading file, and metadata to OneDep API.",
@@ -164,12 +261,6 @@ const docTemplate = `{
                         "name": "scientificMetadata",
                         "in": "formData",
                         "required": true
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Download newly created mmCIF with metadata",
-                        "name": "downloadCif",
-                        "in": "formData"
                     }
                 ],
                 "responses": {
@@ -235,12 +326,6 @@ const docTemplate = `{
                         "name": "scientificMetadata",
                         "in": "formData",
                         "required": true
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Download newly created mmCIF combining metadata and model information",
-                        "name": "downloadCif",
-                        "in": "formData"
                     }
                 ],
                 "responses": {
