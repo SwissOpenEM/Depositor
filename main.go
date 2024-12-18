@@ -181,6 +181,7 @@ func AddFile(c *gin.Context) {
 				return
 			}
 			c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
+			return
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
