@@ -183,6 +183,7 @@ func AddFile(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
 		}
 	}
+	c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
 }
 
 // AddMetadata handles adding metadata to an existing deposition.
@@ -236,7 +237,7 @@ func AddMetadata(c *gin.Context) {
 	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "cif_file_issue_created",
+			"status":  "cif_creation_fails",
 			"message": "Failed to create a file to write cif file with metadata.",
 		})
 		return
@@ -244,13 +245,27 @@ func AddMetadata(c *gin.Context) {
 	fileScientificMetaPath := fileScientificMeta.Name()
 
 	// convert OSCEM-JSON to mmCIF
-	parser.EMDBconvert(
+	cifText, err := parser.EMDBconvert(
 		scientificMetadata,
 		"",
 		"conversions.csv",
 		"mmcif_pdbx_v50.dic",
-		fileScientificMetaPath,
 	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "conversion_to_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "writing_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
 	client := &http.Client{}
 	metadataFile := onedep.FileUpload{
 		Name: "metadata.cif",
@@ -353,14 +368,30 @@ func AddCoordinates(c *gin.Context) {
 	}
 	defer file.Close()
 
-	parser.PDBconvertFromFile(
+	cifText, err := parser.PDBconvertFromFile(
 		scientificMetadata,
 		"",
 		"conversions.csv",
 		"mmcif_pdbx_v50.dic",
 		fileTmp,
-		fileScientificMetaPath,
 	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "conversion_to_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "writing_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+
 	client := &http.Client{}
 	mockFileUpload := onedep.FileUpload{
 		Name:    "coordinates.cif",
@@ -425,7 +456,7 @@ func DownloadMetadata(c *gin.Context) {
 	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "cif_file_issue_created",
+			"status":  "cif_creation_fails",
 			"message": "Failed to create a file to write cif file with metadata.",
 		})
 		return
@@ -433,13 +464,27 @@ func DownloadMetadata(c *gin.Context) {
 	fileScientificMetaPath := fileScientificMeta.Name()
 
 	// convert OSCEM-JSON to mmCIF
-	parser.EMDBconvert(
+	cifText, err := parser.EMDBconvert(
 		scientificMetadata,
 		"",
 		"conversions.csv",
 		"mmcif_pdbx_v50.dic",
-		fileScientificMetaPath,
 	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "conversion_to_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "writing_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
 
 	c.Header("Content-Type", "application/octet-stream")
 	c.FileAttachment(fileScientificMetaPath, "metadata.cif")
@@ -523,14 +568,29 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 	}
 	defer file.Close()
 
-	parser.PDBconvertFromFile(
+	cifText, err := parser.PDBconvertFromFile(
 		scientificMetadata,
 		"",
 		"conversions.csv",
 		"mmcif_pdbx_v50.dic",
 		fileTmp,
-		fileScientificMetaPath,
 	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "conversion_to_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "writing_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
 
 	c.Header("Content-Type", "application/octet-stream")
 	c.FileAttachment(fileScientificMetaPath, "metadata.cif")
