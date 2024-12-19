@@ -9,9 +9,9 @@
     "paths": {
         "/onedep": {
             "post": {
-                "description": "Create a new deposition by uploading experiments, files, and metadata to OneDep API.",
+                "description": "Create a new deposition by uploading experiment and user details to OneDep API.",
                 "consumes": [
-                    "multipart/form-data"
+                    "application/json"
                 ],
                 "produces": [
                     "application/json"
@@ -22,17 +22,153 @@
                 "summary": "Create a new deposition to OneDep",
                 "parameters": [
                     {
+                        "description": "User information",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/onedep.RequestCreate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success response with Deposition ID",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.CreatedDeposition"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    }
+                }
+            }
+        },
+        "/onedep/metadata": {
+            "post": {
+                "description": "Downloading a metadata file. Invokes converter and starts download.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "deposition"
+                ],
+                "summary": "Get a cif file with metadata for manual deposition in OneDep",
+                "parameters": [
+                    {
+                        "description": "Scientific metadata as a JSON string; expects elements from OSCEM on the top level",
+                        "name": "scientificMetadata",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    }
+                }
+            }
+        },
+        "/onedep/pdb": {
+            "post": {
+                "description": "Downloading a metadata file. Invokes converter and starts download.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "deposition"
+                ],
+                "summary": "Get a cif file with metadata and coordinates for manual deposition in OneDep",
+                "parameters": [
+                    {
                         "type": "string",
-                        "description": "User's email",
-                        "name": "email",
+                        "description": "Scientific metadata as a JSON string; expects elements from OSCEM on the top level",
+                        "name": "scientificMetadata",
                         "in": "formData",
                         "required": true
                     },
                     {
-                        "type": "string",
-                        "description": "Experiment type (e.g., single-particle analysis)",
-                        "name": "experiments",
+                        "type": "file",
+                        "description": "File to upload",
+                        "name": "file",
                         "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    }
+                }
+            }
+        },
+        "/onedep/{depID}/file": {
+            "post": {
+                "description": "Uploading file, and metadata to OneDep API.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deposition"
+                ],
+                "summary": "Add file, pixel spacing, contour level and description to deposition in OneDep",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deposition ID to which a file should be uploaded",
+                        "name": "depID",
+                        "in": "path",
                         "required": true
                     },
                     {
@@ -41,15 +177,8 @@
                             "type": "file"
                         },
                         "collectionFormat": "multi",
-                        "description": "File(s) to upload",
+                        "description": "File to upload",
                         "name": "file",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Scientific metadata as a JSON string",
-                        "name": "metadata",
                         "in": "formData",
                         "required": true
                     },
@@ -59,27 +188,206 @@
                         "name": "fileMetadata",
                         "in": "formData",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "JWT token for OneDep API",
+                        "name": "jwtToken",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File ID",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.UploadedFile"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    }
+                }
+            }
+        },
+        "/onedep/{depID}/metadata": {
+            "post": {
+                "description": "Uploading metadata file to OneDep API. This is created by parsing the JSON metadata into the converter.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deposition"
+                ],
+                "summary": "Add a cif file with metadata to deposition in OneDep",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deposition ID to which a file should be uploaded",
+                        "name": "depID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "JWT token for OneDep API",
+                        "name": "jwtToken",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Scientific metadata as a JSON string; expects elements from OSCEM on the top level",
+                        "name": "scientificMetadata",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File ID",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.UploadedFile"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    }
+                }
+            }
+        },
+        "/onedep/{depID}/pdb": {
+            "post": {
+                "description": "Uploading file to OneDep API.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deposition"
+                ],
+                "summary": "Add coordinates and description to deposition in OneDep",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deposition ID to which a file should be uploaded",
+                        "name": "depID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "JWT token for OneDep API",
+                        "name": "jwtToken",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "File to upload",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Scientific metadata as a JSON string; expects elements from OSCEM on the top level",
+                        "name": "scientificMetadata",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File ID",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.UploadedFile"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    }
+                }
+            }
+        },
+        "/onedep/{depID}/process": {
+            "post": {
+                "description": "Process a deposition in OneDep API.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deposition"
+                ],
+                "summary": "Process deposition to OneDep",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deposition ID to which a file should be uploaded",
+                        "name": "depID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "JWT token for OneDep API",
+                        "name": "jwtToken",
+                        "in": "formData",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "Deposition ID",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/onedep.CreatedDeposition"
                         }
                     },
                     "400": {
                         "description": "Error response",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/onedep.ResponseType"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/onedep.ResponseType"
                         }
                     }
                 }
@@ -101,21 +409,73 @@
                         "schema": {
                             "type": "string"
                         }
-                    },
-                    "400": {
-                        "description": "Error response",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
                     }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "onedep.CreatedDeposition": {
+            "type": "object",
+            "properties": {
+                "depID": {
+                    "type": "string"
+                }
+            }
+        },
+        "onedep.RequestCreate": {
+            "type": "object",
+            "required": [
+                "country",
+                "email",
+                "jwtToken",
+                "method",
+                "orcidIds"
+            ],
+            "properties": {
+                "country": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "jwtToken": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "orcidIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "onedep.ResponseType": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "onedep.UploadedFile": {
+            "type": "object",
+            "properties": {
+                "FileID": {
+                    "description": "add metadata?",
+                    "type": "string"
+                },
+                "depID": {
+                    "type": "string"
                 }
             }
         }

@@ -9,7 +9,6 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
-	"os"
 )
 
 // extracts the id of the deposition from the response
@@ -46,7 +45,30 @@ func decodeFid(resp *http.Response) (string, error) {
 	return fmt.Sprintf("%d", f.Fid), nil
 }
 
-// reades the header of mrc files and exstracts the pixel spacing
+func decodeResponse(resp *http.Response) ResponseType {
+
+	type ResponseOneDep struct {
+		Code    string           `json:"code"`
+		Message string           `json:"message"`
+		Extras  map[string][]any `json:"extras,omitempty"` // should add this?
+	}
+	var rOneDep ResponseOneDep
+	decoder := json.NewDecoder(resp.Body)
+	err := decoder.Decode(&rOneDep)
+	if err != nil {
+		return ResponseType{
+			Status:  "cannot_decode",
+			Message: err.Error(),
+		}
+	}
+	// fmt.Println(rOneDep.Extras) // for debugging
+	return ResponseType{
+		Status:  rOneDep.Code,
+		Message: fmt.Sprintf(rOneDep.Message),
+	}
+}
+
+// reads the header of mrc files and extracts the pixel spacing
 func getMeta(file multipart.File) ([3]float32, error) {
 	var pixelSpacing [3]float32
 	// https://bio3d.colorado.edu/imod/betaDoc/mrc_format.txt
@@ -76,52 +98,57 @@ func getMeta(file multipart.File) ([3]float32, error) {
 }
 
 // sends a request to OneDep to create a new deposition
-func CreateDeposition(client *http.Client, userInput UserInfo) (Deposition, error) {
+func CreateDeposition(client *http.Client, userInput UserInfo, token string) (Deposition, *ResponseType) {
 	var deposition Deposition
 	// Convert the user input to JSON
 	jsonInput, err := json.Marshal(userInput)
 	if err != nil {
-		return deposition, err
+		return deposition, &ResponseType{
+			Status:  "error parsing request body",
+			Message: err.Error(),
+		}
 	}
 	url := baseURL + "new"
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonInput))
 	if err != nil {
-		return deposition, fmt.Errorf("error sending request to url %v: %v", url, err)
+		return deposition, &ResponseType{
+			Status:  fmt.Sprintf("error sending request to url %v", url),
+			Message: err.Error(),
+		}
 	}
 
-	jwtToken, err := os.ReadFile("bearer.jwt")
-	if err != nil {
-		return deposition, fmt.Errorf("error reading jwt: %v", err)
-	}
-	var bearer = "Bearer " + string(jwtToken)
-	req.Header.Add("Authorization", bearer)
+	req.Header.Add("Authorization", "Bearer "+token)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return deposition, fmt.Errorf("errored when sending request to the server: %v", err)
+		return deposition, &ResponseType{
+			Status:  "error sending request to the server",
+			Message: err.Error(),
+		}
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 200 || resp.StatusCode == 201 {
+	if resp.StatusCode == 200 || resp.StatusCode == 201 { // even not created instance, when e.g country is set wrong this seems to return a 200 with an error.
+		// if responseDecoded.Message == "" { // now it would return  200 status code for hen there is an error when country is specified wrong
 		deposition.Id, err = decodeDid(resp)
 		if err != nil {
-			return deposition, err
+			return deposition, &ResponseType{
+				Status:  "couldn't decode deposition id",
+				Message: err.Error(),
+			}
 		}
-	} else {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return deposition, fmt.Errorf("create: failed to create new deposition: status code %v, status %s, unreadable body", resp.StatusCode, resp.Status)
-		}
-		return deposition, fmt.Errorf("create: failed to create new deposition: status code %v, status %s, body %s", resp.StatusCode, resp.Status, string(body))
-	}
 
-	return deposition, nil
+		return deposition, nil
+	}
+	responseDecoded := decodeResponse(resp)
+	return deposition, &responseDecoded
 }
 
-func Both(deposition Deposition, fileUpload FileUpload) (DepositionFile, *bytes.Buffer, *multipart.Writer, error) {
+// prepare deposition instance, body request and multipart writer
+func prepareFileDeposition(deposition string, fileUpload FileUpload) (DepositionFile, *bytes.Buffer, *multipart.Writer, error) {
 	var fD DepositionFile
-	fD.DId = deposition.Id
+	fD.DId = deposition
 	fD.Name = fileUpload.Name
 	fD.Type = fileUpload.Type
 	fD.ContourLevel = fileUpload.Contour
@@ -141,43 +168,15 @@ func Both(deposition Deposition, fileUpload FileUpload) (DepositionFile, *bytes.
 	return fD, body, writer, err
 }
 
-// sends a request to OneDep to add files to an existing deposition with id
-func AddCIFtoDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file string) (DepositionFile, error) {
-	fD, body, writer, err := Both(deposition, fileUpload)
-	if err != nil {
-		return fD, err
-	}
-	// open file
-	cifFile, err := os.Open(file)
-	if err != nil {
-		return fD, err
-	}
-	defer cifFile.Close()
-
-	//upload files
-	part, err := writer.CreateFormFile("file", fD.Name)
-	if err != nil {
-		return fD, err
-	}
-
-	_, err = io.Copy(part, cifFile)
-	if err != nil {
-		return fD, err
-	}
-
-	err = writer.Close()
-	if err != nil {
-		return fD, err
-	}
-
-	return UploadFile(client, fD, body, writer)
-}
-
 // sends a request to OneDep to add multipart files to an existing deposition with id
-func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload FileUpload, file multipart.File) (DepositionFile, error) {
-	fD, body, writer, err := Both(deposition, fileUpload)
+func AddFileToDeposition(client *http.Client, deposition string, fileUpload FileUpload, file multipart.File, token string) (DepositionFile, *ResponseType) {
+
+	fD, body, writer, err := prepareFileDeposition(deposition, fileUpload)
 	if err != nil {
-		return fD, err
+		return fD, &ResponseType{
+			Status:  "request_body_issue",
+			Message: err.Error(),
+		}
 	}
 	// extract pixel spacing necessary to upload metadata
 	for j := range NeedMeta {
@@ -187,70 +186,79 @@ func AddFileToDeposition(client *http.Client, deposition Deposition, fileUpload 
 				log.Printf("failed to extract pixel spacing: %v; please provide it in OneDep manually!", err)
 			}
 			fD.PixelSpacing = pixelSpacing
-			fmt.Println(fD.Name, pixelSpacing)
 		}
 	}
 
-	//upload files
+	//upload file
 	part, err := writer.CreateFormFile("file", fD.Name)
 	if err != nil {
-		return fD, err
+		return fD, &ResponseType{
+			Status:  "request_file_issue",
+			Message: err.Error(),
+		}
 	}
 
 	_, err = io.Copy(part, file)
 	if err != nil {
-		return fD, err
+		return fD, &ResponseType{
+			Status:  "request_file_issue",
+			Message: err.Error(),
+		}
 	}
 
 	err = writer.Close()
 	if err != nil {
-		return fD, err
+		return fD, &ResponseType{
+			Status:  "request_file_issue",
+			Message: err.Error(),
+		}
 	}
-	return UploadFile(client, fD, body, writer)
+	return UploadFile(client, fD, body, writer, token)
 }
 
-func UploadFile(client *http.Client, fD DepositionFile, body *bytes.Buffer, writer *multipart.Writer) (DepositionFile, error) {
+func UploadFile(client *http.Client, fD DepositionFile, body *bytes.Buffer, writer *multipart.Writer, token string) (DepositionFile, *ResponseType) {
 
 	// Prepare the request
 	url := baseURL + fD.DId + "/files/"
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
-		return fD, err
+		return fD, &ResponseType{
+			Status:  "request_issue",
+			Message: err.Error(),
+		}
 	}
 
-	jwtToken, err := os.ReadFile("bearer.jwt")
-	if err != nil {
-		return fD, fmt.Errorf("error reading jwt: %v", err)
-	}
-	var bearer = "Bearer " + string(jwtToken)
-
-	req.Header.Add("Authorization", bearer)
+	req.Header.Add("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		return fD, fmt.Errorf("error sending request to the server: %v", err)
+		return fD, &ResponseType{
+			Status:  "request_error",
+			Message: fmt.Sprintf("error sending request to the server: %v", err),
+		}
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode == 200 || resp.StatusCode == 201 {
 		fD.Id, err = decodeFid(resp)
+
 		if err != nil {
-			return fD, err
+			return fD, &ResponseType{
+				Status:  "decoding_error",
+				Message: fmt.Sprintf("error decoding File ID: %v", err),
+			}
 		}
 		return fD, nil
 	} else {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fD, fmt.Errorf("file: failed to add file to deposition %v: status code %v, status %s, unreadable body", fD.DId, resp.StatusCode, resp.Status)
-		}
-		return fD, fmt.Errorf("file: failed to add file to deposition %v: status code %v, status %s, body %s", fD.DId, resp.StatusCode, resp.Status, string(body))
+		responseDecoded := decodeResponse(resp)
+		return fD, &responseDecoded
+
 	}
 }
 
 // sends a request to OneDep to add files to an existing deposition with id
-func AddMetadataToFile(client *http.Client, fD DepositionFile) (DepositionFile, error) {
+func AddMetadataToFile(client *http.Client, fD DepositionFile, token string) (DepositionFile, *ResponseType) {
 
 	// Prepare metadata request
 	data := map[string]interface{}{
@@ -267,53 +275,48 @@ func AddMetadataToFile(client *http.Client, fD DepositionFile) (DepositionFile, 
 
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
-		fmt.Println("Error marshaling JSON:", err)
+		return fD, &ResponseType{
+			Status:  "JSON_error",
+			Message: err.Error(),
+		}
 	}
 	urlFileMeta := baseURL + fD.DId + "/files/" + fD.Id + "/metadata"
 	req, err := http.NewRequest("POST", urlFileMeta, bytes.NewBuffer(jsonBody))
-
 	if err != nil {
-		return fD, err
+		return fD, &ResponseType{
+			Status:  "request_error",
+			Message: err.Error(),
+		}
 	}
-	jwtToken, err := os.ReadFile("bearer.jwt")
-	if err != nil {
-		return fD, fmt.Errorf("error reading jwt: %v", err)
-	}
-	var bearer = "Bearer " + string(jwtToken)
 
-	req.Header.Add("Authorization", bearer)
+	req.Header.Add("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		return fD, fmt.Errorf("error sending request to  to url %v: %v", urlFileMeta, err)
+		return fD, &ResponseType{
+			Status:  "request_error",
+			Message: fmt.Sprintf("error sending request to  to url %v: %v", urlFileMeta, err),
+		}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 || resp.StatusCode == 201 {
 		return fD, nil
 	} else {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fD, fmt.Errorf("file metadata: failed to add metadata to file %v in deposition %v: status code %v, status %s, unreadable body", fD.Id, fD.DId, resp.StatusCode, resp.Status)
-		}
-		return fD, fmt.Errorf("file metadata: failed to add metadata to file %v in deposition %v: status code %v, status %s, body %s", fD.Id, fD.DId, resp.StatusCode, resp.Status, string(body))
+		responseDecoded := decodeResponse(resp)
+		return fD, &responseDecoded
 	}
 }
 
 // sends a request to OneDep to process a  deposition
-func ProcesseDeposition(client *http.Client, deposition Deposition) (string, error) {
+func ProcessDeposition(client *http.Client, deposition string, token string) (string, error) {
 
-	url := baseURL + deposition.Id + "process"
+	url := baseURL + deposition + "/process"
 	req, _ := http.NewRequest("POST", url, new(bytes.Buffer))
 
-	jwtToken, err := os.ReadFile("bearer.jwt")
-	if err != nil {
-		return "", fmt.Errorf("error reading jwt: %v", err)
-	}
-	var bearer = "Bearer " + string(jwtToken)
-	req.Header.Add("Authorization", bearer)
+	req.Header.Add("Authorization", "Bearer "+token)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
@@ -323,7 +326,6 @@ func ProcesseDeposition(client *http.Client, deposition Deposition) (string, err
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 || resp.StatusCode == 201 {
-
 		return "success", nil
 	} else {
 		body, err := io.ReadAll(resp.Body)

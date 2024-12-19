@@ -12,6 +12,32 @@ const (
 	numberOfWords = 56
 )
 
+type RequestCreate struct {
+	Email    string   `json:"email" binding:"required,email"`
+	OrcidIds []string `json:"orcidIds" binding:"required"`
+	Password string   `json:"password" binding:"-"`
+	Country  string   `json:"country" binding:"required"`
+	Method   string   `json:"method" binding:"required"`
+	JWTToken string   `json:"jwtToken" binding:"required"`
+}
+
+type FileMetadata struct {
+	FileName string  `json:"name"`
+	FileType string  `json:"type"`
+	Contour  float32 `json:"contour,omitempty"`
+	Details  string  `json:"details"`
+}
+type ResponseType struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+type CreatedDeposition struct {
+	DepID string `json:"depID"`
+}
+type UploadedFile struct {
+	DepID  string `json:"depID"`
+	FileID string `json:"FileID"` // add metadata?
+}
 type EmMethod struct {
 	Type    string `json:"type"`
 	Subtype string `json:"subtype,omitempty"`
@@ -25,30 +51,17 @@ var EmMethods = map[string]EmMethod{
 	"electron-cristallography": {Type: "ec"},
 }
 
-//	type ScicatEM struct {
-//		Email      string
-//		Metadata   string
-//		Experiment string
-//		Files      []*multipart.FileHeader
-//	}
 type UserInfo struct {
 	Email       string     `json:"email"`
 	Users       []string   `json:"users"`
 	Country     string     `json:"country"`
 	Experiments []EmMethod `json:"experiments"`
+	Password    string     `json:"password,omitempty"`
 }
 
-//	type UserInput struct {
-//		Email       string       `json:"email"`
-//		Users       []string     `json:"users"`
-//		Country     string       `json:"country"`
-//		Experiments []Experiment `json:"experiments"`
-//		Files       []FileUpload `json:"files"`
-//	}
 type FileUpload struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-	// File    string  `json:"file"`
+	Name    string  `json:"name"`
+	Type    string  `json:"type"`
 	Contour float32 `json:"contour"`
 	Details string  `json:"details"`
 }

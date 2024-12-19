@@ -1,3 +1,47 @@
+definitions:
+  onedep.CreatedDeposition:
+    properties:
+      depID:
+        type: string
+    type: object
+  onedep.RequestCreate:
+    properties:
+      country:
+        type: string
+      email:
+        type: string
+      jwtToken:
+        type: string
+      method:
+        type: string
+      orcidIds:
+        items:
+          type: string
+        type: array
+      password:
+        type: string
+    required:
+    - country
+    - email
+    - jwtToken
+    - method
+    - orcidIds
+    type: object
+  onedep.ResponseType:
+    properties:
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  onedep.UploadedFile:
+    properties:
+      FileID:
+        description: add metadata?
+        type: string
+      depID:
+        type: string
+    type: object
 info:
   contact: {}
   description: Rest API for communication between SciCat frontend and depositor backend.
@@ -8,36 +52,182 @@ paths:
   /onedep:
     post:
       consumes:
-      - multipart/form-data
-      description: Create a new deposition by uploading experiments, files, and metadata
+      - application/json
+      description: Create a new deposition by uploading experiment and user details
         to OneDep API.
       parameters:
-      - description: User's email
-        in: formData
-        name: email
+      - description: User information
+        in: body
+        name: request
         required: true
-        type: string
-      - description: Experiment type (e.g., single-particle analysis)
-        in: formData
-        name: experiments
+        schema:
+          $ref: '#/definitions/onedep.RequestCreate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Success response with Deposition ID
+          schema:
+            $ref: '#/definitions/onedep.CreatedDeposition'
+        "400":
+          description: Error response
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+      summary: Create a new deposition to OneDep
+      tags:
+      - deposition
+  /onedep/{depID}/file:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Uploading file, and metadata to OneDep API.
+      parameters:
+      - description: Deposition ID to which a file should be uploaded
+        in: path
+        name: depID
         required: true
         type: string
       - collectionFormat: multi
-        description: File(s) to upload
+        description: File to upload
         in: formData
         items:
           type: file
         name: file
         required: true
         type: array
-      - description: Scientific metadata as a JSON string
-        in: formData
-        name: metadata
-        required: true
-        type: string
       - description: File metadata as a JSON string
         in: formData
         name: fileMetadata
+        required: true
+        type: string
+      - description: JWT token for OneDep API
+        in: formData
+        name: jwtToken
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: File ID
+          schema:
+            $ref: '#/definitions/onedep.UploadedFile'
+        "400":
+          description: Error response
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+      summary: Add file, pixel spacing, contour level and description to deposition
+        in OneDep
+      tags:
+      - deposition
+  /onedep/{depID}/metadata:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Uploading metadata file to OneDep API. This is created by parsing
+        the JSON metadata into the converter.
+      parameters:
+      - description: Deposition ID to which a file should be uploaded
+        in: path
+        name: depID
+        required: true
+        type: string
+      - description: JWT token for OneDep API
+        in: formData
+        name: jwtToken
+        required: true
+        type: string
+      - description: Scientific metadata as a JSON string; expects elements from OSCEM
+          on the top level
+        in: formData
+        name: scientificMetadata
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: File ID
+          schema:
+            $ref: '#/definitions/onedep.UploadedFile'
+        "400":
+          description: Error response
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+      summary: Add a cif file with metadata to deposition in OneDep
+      tags:
+      - deposition
+  /onedep/{depID}/pdb:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Uploading file to OneDep API.
+      parameters:
+      - description: Deposition ID to which a file should be uploaded
+        in: path
+        name: depID
+        required: true
+        type: string
+      - description: JWT token for OneDep API
+        in: formData
+        name: jwtToken
+        required: true
+        type: string
+      - description: File to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Scientific metadata as a JSON string; expects elements from OSCEM
+          on the top level
+        in: formData
+        name: scientificMetadata
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: File ID
+          schema:
+            $ref: '#/definitions/onedep.UploadedFile'
+        "400":
+          description: Error response
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+      summary: Add coordinates and description to deposition in OneDep
+      tags:
+      - deposition
+  /onedep/{depID}/process:
+    post:
+      consumes:
+      - application/json
+      description: Process a deposition in OneDep API.
+      parameters:
+      - description: Deposition ID to which a file should be uploaded
+        in: path
+        name: depID
+        required: true
+        type: string
+      - description: JWT token for OneDep API
+        in: formData
+        name: jwtToken
         required: true
         type: string
       produces:
@@ -46,18 +236,83 @@ paths:
         "200":
           description: Deposition ID
           schema:
-            type: string
+            $ref: '#/definitions/onedep.CreatedDeposition'
         "400":
           description: Error response
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/onedep.ResponseType'
         "500":
           description: Internal server error
           schema:
-            additionalProperties: true
-            type: object
-      summary: Create a new deposition to OneDep
+            $ref: '#/definitions/onedep.ResponseType'
+      summary: Process deposition to OneDep
+      tags:
+      - deposition
+  /onedep/metadata:
+    post:
+      consumes:
+      - application/json
+      description: Downloading a metadata file. Invokes converter and starts download.
+      parameters:
+      - description: Scientific metadata as a JSON string; expects elements from OSCEM
+          on the top level
+        in: body
+        name: scientificMetadata
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Error response
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+      summary: Get a cif file with metadata for manual deposition in OneDep
+      tags:
+      - deposition
+  /onedep/pdb:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Downloading a metadata file. Invokes converter and starts download.
+      parameters:
+      - description: Scientific metadata as a JSON string; expects elements from OSCEM
+          on the top level
+        in: formData
+        name: scientificMetadata
+        required: true
+        type: string
+      - description: File to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Error response
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+      summary: Get a cif file with metadata and coordinates for manual deposition
+        in OneDep
       tags:
       - deposition
   /version:
@@ -71,16 +326,6 @@ paths:
           description: Depositior version
           schema:
             type: string
-        "400":
-          description: Error response
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal server error
-          schema:
-            additionalProperties: true
-            type: object
       summary: Return current version
       tags:
       - version

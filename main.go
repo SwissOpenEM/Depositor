@@ -23,6 +23,7 @@ import (
 //	@description	Rest API for communication between SciCat frontend and depositor backend. Backend service enables deposition of datasets to OneDep API.
 
 var version string = "DEV"
+var PORT string = "8080"
 
 // Convert multipart.File to *os.File by saving it to a temporary file
 func convertMultipartFileToFile(file multipart.File) (*os.File, error) {
@@ -30,7 +31,7 @@ func convertMultipartFileToFile(file multipart.File) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close() // Close the multipart.File after copying
+	defer file.Close()
 
 	// Copy the contents of the multipart.File to the temporary file
 	if _, err := io.Copy(tempFile, file); err != nil {
@@ -47,174 +48,579 @@ func convertMultipartFileToFile(file multipart.File) (*os.File, error) {
 
 // Create handles the creation of a new deposition
 // @Summary Create a new deposition to OneDep
-// @Description Create a new deposition by uploading experiments, files, and metadata to OneDep API.
+// @Description Create a new deposition by uploading experiment and user details to OneDep API.
+// @Tags deposition
+// @Accept application/json
+// @Produce json
+// @Param	request	body	onedep.RequestCreate	true "User information"
+// @Success 200 {object} onedep.CreatedDeposition "Success response with Deposition ID"
+// @Failure 400 {object} onedep.ResponseType "Error response"
+// @Failure 500 {object} onedep.ResponseType "Internal server error"
+// @Router /onedep [post]
+func Create(c *gin.Context) {
+
+	var body onedep.RequestCreate
+
+	// Bind JSON payload to the struct
+	if err := c.ShouldBindJSON(&body); err != nil {
+
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "invalid_request_body",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// email := body.Email
+	email := "sofya.laskina@epfl.ch" //remove later\
+	var experiments []onedep.EmMethod
+	if exp, ok := onedep.EmMethods[body.Method]; ok {
+		experiments = []onedep.EmMethod{exp}
+	} else {
+
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "method_unknown",
+			"message": fmt.Sprintf("unknown EM method %v", body.Method),
+		})
+		return
+	}
+	bearer := body.JWTToken
+	depData := onedep.UserInfo{
+		Email:       email,
+		Users:       body.OrcidIds,
+		Country:     "United States", // body.country
+		Experiments: experiments,
+		Password:    body.Password,
+	}
+
+	client := &http.Client{}
+
+	deposition, resp := onedep.CreateDeposition(client, depData, bearer)
+	if resp != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  resp.Status,
+			"message": resp.Message,
+		})
+		return
+	} else {
+		c.JSON(http.StatusCreated, gin.H{"depID": deposition.Id})
+		return
+	}
+
+}
+
+// AddFiles handles adding files to an existing deposition. It also opens a header of mrc files and extracts the pixel spacing
+// @Summary Add file, pixel spacing, contour level and description to deposition in OneDep
+// @Description Uploading file, and metadata to OneDep API.
 // @Tags deposition
 // @Accept multipart/form-data
 // @Produce json
-// @Param email formData string true "User's email"
-// @Param experiments formData string true "Experiment type (e.g., single-particle analysis)"
-// @Param file formData []file true "File(s) to upload" collectionFormat(multi)
-// @Param metadata formData string true "Scientific metadata as a JSON string"
+// @Param depID path string true "Deposition ID to which a file should be uploaded"
+// @Param file formData []file true "File to upload" collectionFormat(multi)
 // @Param fileMetadata formData string true "File metadata as a JSON string"
-// @Success 200 {string} string "Deposition ID"
-// @Failure 400 {object} map[string]interface{} "Error response"
-// @Failure 500 {object} map[string]interface{} "Internal server error"
-// @Router /onedep [post]
-func Create(c *gin.Context) {
+// @Param jwtToken formData string true "JWT token for OneDep API"
+// @Success 200 {object} onedep.UploadedFile "File ID"
+// @Failure 400 {object} onedep.ResponseType "Error response"
+// @Failure 500 {object} onedep.ResponseType "Internal server error"
+// @Router /onedep/{depID}/file [post]
+func AddFile(c *gin.Context) {
 	err := c.Request.ParseMultipartForm(10 << 20)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse Form data."})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "form_invalid",
+			"message": "Failed to parse Form data.",
+		})
 		return
 	}
-	// Extract entries from multipart form
-	email := c.PostForm("email")
-	experiment := onedep.EmMethods[c.PostForm("experiments")]
-	experiments := []onedep.EmMethod{experiment}
-	files := c.Request.MultipartForm.File["file"] //files
-	metadataStr := c.PostForm("metadata")         //scientificMetadata
-	if metadataStr == "{}" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing scientific metadata."})
-		return
-	}
-	fmt.Println(email, experiments)
-	metadataFilesStr := c.PostForm("fileMetadata") //files Metadata
+	depID := c.Param("depID")
+	bearer := c.PostForm("jwtToken")
+	fileHeader := c.Request.MultipartForm.File["file"][0] //file
+	metadataFilesStr := c.PostForm("fileMetadata")        //files Metadata
+
 	if metadataFilesStr == "{}" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing Files information."})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "form_invalid",
+			"message": "Missing metadata for files information.",
+		})
+		return
+	}
+
+	var fileMetadata onedep.FileUpload
+	err = json.Unmarshal([]byte(metadataFilesStr), &fileMetadata)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "JSON_invalid",
+			"message": fmt.Sprintf("error decoding JSON: %v", err.Error()),
+		})
+		return
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "file_header_invalid",
+			"message": fmt.Sprintf("failed to open file header: %v", err.Error()),
+		})
+		return
+	}
+	defer file.Close()
+
+	client := &http.Client{}
+	var fileDeposited onedep.DepositionFile
+	fileDeposited, errResp := onedep.AddFileToDeposition(client, depID, fileMetadata, file, bearer)
+	if errResp != nil {
+		c.JSON(http.StatusBadRequest, errResp)
+		return
+	}
+	// c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
+	for j := range onedep.NeedMeta {
+		if fileMetadata.Type == onedep.NeedMeta[j] {
+			fileDeposited, errResp := onedep.AddMetadataToFile(client, fileDeposited, bearer)
+			if errResp != nil {
+				c.JSON(http.StatusBadRequest, errResp)
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
+}
+
+// AddMetadata handles adding metadata to an existing deposition.
+// @Summary Add a cif file with metadata to deposition in OneDep
+// @Description Uploading metadata file to OneDep API. This is created by parsing the JSON metadata into the converter.
+// @Tags deposition
+// @Accept multipart/form-data
+// @Produce json
+// @Param depID path string true "Deposition ID to which a file should be uploaded"
+// @Param jwtToken formData string true "JWT token for OneDep API"
+// @Param scientificMetadata formData string true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
+// @Success 200 {object} onedep.UploadedFile "File ID"
+// @Failure 400 {object} onedep.ResponseType "Error response"
+// @Failure 500 {object} onedep.ResponseType "Internal server error"
+// @Router /onedep/{depID}/metadata [post]
+func AddMetadata(c *gin.Context) {
+
+	err := c.Request.ParseMultipartForm(10 << 20)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Failed to parse Form data.",
+		})
+		return
+	}
+
+	depID := c.Param("depID")
+	bearer := c.PostForm("jwtToken")
+
+	// FIX ME add a OSCEM SCHEMA
+	// Extract entries from multipart form
+	metadataStr := c.PostForm("scientificMetadata")
+	if metadataStr == "{}" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Missing scientific metadata.",
+		})
 		return
 	}
 	// Parse  JSON string into the Metadata
 	var scientificMetadata map[string]any
 	err = json.Unmarshal([]byte(metadataStr), &scientificMetadata)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse scientific metadata to JSON."})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Failed to parse scientific metadata to JSON.",
+		})
+		return
+	}
+	// create a temporary cif file that will be used for a deposition
+	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "cif_creation_fails",
+			"message": "Failed to create a file to write cif file with metadata.",
+		})
+		return
+	}
+	fileScientificMetaPath := fileScientificMeta.Name()
+
+	// convert OSCEM-JSON to mmCIF
+	cifText, err := parser.EMDBconvert(
+		scientificMetadata,
+		"",
+		"conversions.csv",
+		"mmcif_pdbx_v50.dic",
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "conversion_to_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "writing_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+	client := &http.Client{}
+	metadataFile := onedep.FileUpload{
+		Name: "metadata.cif",
+		Type: "co-cif", // FIX ME add appropriate type once it's implemented in OneDep API
+	}
+	cifFile, err := os.Open(fileScientificMetaPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, &onedep.ResponseType{
+			Status:  "cif_file_issue",
+			Message: err.Error(),
+		})
+	}
+	defer cifFile.Close()
+
+	fileDeposited, errResp := onedep.AddFileToDeposition(client, depID, metadataFile, cifFile, bearer)
+	if errResp != nil {
+		c.JSON(http.StatusBadRequest, errResp)
+		return
+	}
+	defer os.Remove(fileScientificMetaPath)
+
+	c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
+}
+
+// AddCoordinates handles adding coordinates files to an existing deposition.
+// @Summary Add coordinates and description to deposition in OneDep
+// @Description Uploading file to OneDep API.
+// @Tags deposition
+// @Accept multipart/form-data
+// @Produce json
+// @Param depID path string true "Deposition ID to which a file should be uploaded"
+// @Param jwtToken formData string true "JWT token for OneDep API"
+// @Param file formData file true "File to upload"
+// @Param scientificMetadata formData string true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
+// @Success 200 {object} onedep.UploadedFile "File ID"
+// @Failure 400 {object} onedep.ResponseType "Error response"
+// @Failure 500 {object} onedep.ResponseType "Internal server error"
+// @Router /onedep/{depID}/pdb [post]
+func AddCoordinates(c *gin.Context) {
+	err := c.Request.ParseMultipartForm(10 << 20)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Failed to parse Form data.",
+		})
+		return
+	}
+
+	depID := c.Param("depID")
+	bearer := c.PostForm("jwtToken")
+	fileHeader := c.Request.MultipartForm.File["file"][0] //file
+
+	metadataStr := c.PostForm("scientificMetadata")
+	if metadataStr == "{}" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Missing scientific metadata.",
+		})
+		return
+	}
+	// Parse  JSON string into the Metadata
+	var scientificMetadata map[string]any
+	err = json.Unmarshal([]byte(metadataStr), &scientificMetadata)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Failed to parse scientific metadata to JSON.",
+		})
 		return
 	}
 
 	// create a temporary cif file that will be used for a deposition
 	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create a file to write cif file with metadata."})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "cif_invalid",
+			"message": "Failed to create a file to write new cif file.",
+		})
 		return
 	}
 	fileScientificMetaPath := fileScientificMeta.Name()
 
-	var metadataFiles []onedep.FileUpload
-	err = json.Unmarshal([]byte(metadataFilesStr), &metadataFiles)
+	file, err := fileHeader.Open()
 	if err != nil {
-		errText := fmt.Errorf("error decoding JSON: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": errText})
-	}
-	// FIXME: add calls to validation API before creating any deposition - beta
-
-	// send a request to create a deposition:
-
-	depData := onedep.UserInfo{
-		Email:       "sofya.laskina@epfl.ch", //email,
-		Users:       []string{"0009-0003-3665-5367"},
-		Country:     "United States", // temporarily
-		Experiments: experiments,
-	}
-	// fmt.Println(depData)
-	client := &http.Client{}
-
-	deposition, err := onedep.CreateDeposition(client, depData)
-	if err != nil {
-		errText := fmt.Errorf("failed to create deposition: %w", err)
-		fmt.Println(err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": errText})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "file_invalid",
+			"message": fmt.Sprintf("Failed to open file header: %v", err.Error()),
+		})
 		return
 	}
-	// deposition := onedep.Deposition{
-	// 	Id:    "D_800042",
-	// 	Files: []onedep.DepositionFile{},
-	// }
-	// text, _ := fmt.Printf("deposition created in OneDep, id %v", deposition.Id)
-	// c.JSON(http.StatusOK, gin.H{"messsage": "deposition created in OneDep"})
-	// fmt.Println("created deposition", deposition.Id)
-	var fileDeposited onedep.DepositionFile
-	metadataTracked := false
-	for i, fileHeader := range files {
-		file, err := fileHeader.Open()
-		if err != nil {
-			errText := fmt.Errorf("failed to open file header: %w", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": errText})
-			return
-		}
-		defer file.Close()
+	defer file.Close()
 
-		if metadataFiles[i].Type == "co-cif" {
-			fileTmp, err := convertMultipartFileToFile(file)
-			if err != nil {
-				errText := fmt.Errorf("failed to open cif file to read coordinates: %w", err)
-				c.JSON(http.StatusBadRequest, gin.H{"error": errText})
-				return
-			}
-			defer file.Close()
-			fmt.Println(scientificMetadata)
-			parser.PDBconvertFromFile(
-				scientificMetadata,
-				"",
-				"conversions.csv",
-				"mmcif_pdbx_v50.dic",
-				fileTmp,
-				fileScientificMetaPath,
-			)
-			metadataTracked = true
-			fileDeposited, err = onedep.AddCIFtoDeposition(client, deposition, metadataFiles[i], fileScientificMetaPath)
-			if err != nil {
-				errText := fmt.Errorf("failed to open temp file with annotated model and scientific metadata: %w", err)
-				c.JSON(http.StatusBadRequest, gin.H{"error": errText})
-				return
-			}
-			defer file.Close()
-		} else {
-			fileDeposited, err = onedep.AddFileToDeposition(client, deposition, metadataFiles[i], file)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err})
-				return
-			}
-		}
-		deposition.Files = append(deposition.Files, fileDeposited)
-
-		for j := range onedep.NeedMeta {
-			if metadataFiles[i].Type == onedep.NeedMeta[j] {
-				onedep.AddMetadataToFile(client, fileDeposited)
-			}
-		}
+	fileTmp, err := convertMultipartFileToFile(file)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "file_invalid",
+			"message": fmt.Sprintf("failed to open cif file to read coordinates: %v", err.Error()),
+		})
+		return
 	}
-	// if no cif was provided, then extra metadata file needs to be created
-	if !metadataTracked {
-		parser.EMDBconvert(
-			scientificMetadata,
-			"",
-			"conversions.csv",
-			"mmcif_pdbx_v50.dic",
-			fileScientificMetaPath,
-		)
+	defer file.Close()
 
-		metadataFile := onedep.FileUpload{
-			Name: "metadata.cif",
-			Type: "co-cif", // FIX ME add aproprioate type once it's implemeted in OneDep API
-		}
-		fileDeposited, err = onedep.AddCIFtoDeposition(client, deposition, metadataFile, fileScientificMetaPath)
-		if err != nil {
-			errText := fmt.Errorf("failed to open temp file with annotated model and scientific metadata: %w", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": errText})
-			return
-		}
-		deposition.Files = append(deposition.Files, fileDeposited)
+	cifText, err := parser.PDBconvertFromFile(
+		scientificMetadata,
+		"",
+		"conversions.csv",
+		"mmcif_pdbx_v50.dic",
+		fileTmp,
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "conversion_to_cif_fails",
+			"message": err.Error(),
+		})
+		return
 	}
-	//defer os.Remove(fileScientificMetaPath)
-	fmt.Println(fileScientificMetaPath)
-	c.JSON(http.StatusOK, deposition.Id)
 
-	// FIX ME uncomment once pixel spacing and contour level are propagated correctly into the request, st files can be processed.
-	// _, err = onedep.ProcesseDeposition(client, deposition)
-	// if err != nil {
-	// 	c.JSON(http.StatusBadRequest, gin.H{"error": err})
-	// 	return
+	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "writing_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	client := &http.Client{}
+	mockFileUpload := onedep.FileUpload{
+		Name:    "coordinates.cif",
+		Type:    "co-cif",
+		Details: "",
+	}
+	cifFile, err := os.Open(fileScientificMetaPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, &onedep.ResponseType{
+			Status:  "cif_file_issue",
+			Message: err.Error(),
+		})
+	}
+	defer cifFile.Close()
+	fileDeposited, errResp := onedep.AddFileToDeposition(client, depID, mockFileUpload, cifFile, bearer)
+	if errResp != nil {
+		c.JSON(http.StatusBadRequest, errResp)
+		return
+	}
+	defer file.Close()
+	// add in web UI no such fields for coordinates
+
+	// if fileMetadata.Details != "" {
+	// 	fileDeposited, errResp := onedep.AddMetadataToFile(client, fileDeposited, bearer)
+	// 	if errResp != nil {
+	// 		c.JSON(http.StatusBadRequest, errResp)
+	// 		return
+	// 	}
+	// 	c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
 	// }
 
+	defer os.Remove(fileScientificMetaPath)
+	c.JSON(http.StatusOK, gin.H{
+		"depID":  depID,
+		"fileID": fileDeposited.Id,
+	})
+}
+
+// DownloadMetadata handles getting a cif file with metadata.
+// @Summary Get a cif file with metadata for manual deposition in OneDep
+// @Description Downloading a metadata file. Invokes converter and starts download.
+// @Tags deposition
+// @Accept application/json
+// @Produce application/octet-stream
+// @Param scientificMetadata body object true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
+// @Success 200 {file} application/octet-stream "File download for the generated metadata.cif"
+// @Failure 400 {object} onedep.ResponseType "Error response"
+// @Failure 500 {object} onedep.ResponseType "Internal server error"
+// @Router /onedep/metadata [post]
+func DownloadMetadata(c *gin.Context) {
+	var scientificMetadata map[string]interface{}
+
+	// Bind the JSON payload into a metadata
+	if err := c.ShouldBindJSON(&scientificMetadata); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "invalid_request_body",
+			"message": fmt.Sprintf("Failed to parse metadata body: %v", err.Error()),
+		})
+		return
+	}
+	// create a temporary cif file that will be used for a deposition
+	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "cif_creation_fails",
+			"message": "Failed to create a file to write cif file with metadata.",
+		})
+		return
+	}
+	fileScientificMetaPath := fileScientificMeta.Name()
+
+	// convert OSCEM-JSON to mmCIF
+	cifText, err := parser.EMDBconvert(
+		scientificMetadata,
+		"",
+		"conversions.csv",
+		"mmcif_pdbx_v50.dic",
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "conversion_to_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "writing_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.Header("Content-Type", "application/octet-stream")
+	c.FileAttachment(fileScientificMetaPath, "metadata.cif")
+
+	defer os.Remove(fileScientificMetaPath)
+
+}
+
+// DownloadCoordinates handles parsing an existing cif and metadata and downloading a new cif file.
+// @Summary Get a cif file with metadata and coordinates for manual deposition in OneDep
+// @Description Downloading a metadata file. Invokes converter and starts download.
+// @Tags deposition
+// @Accept multipart/form-data
+// @Produce application/octet-stream
+// @Param scientificMetadata formData string true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
+// @Param file formData file true "File to upload"
+// @Success 200 {file} application/octet-stream "File download for the generated metadata.cif"
+// @Failure 400 {object} onedep.ResponseType "Error response"
+// @Failure 500 {object} onedep.ResponseType "Internal server error"
+// @Router /onedep/pdb [post]
+func DownloadCoordinatesWithMetadata(c *gin.Context) {
+	err := c.Request.ParseMultipartForm(10 << 20)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Failed to parse Form data.",
+		})
+		return
+	}
+
+	fileHeader := c.Request.MultipartForm.File["file"][0]
+
+	// Extract entries from multipart form
+	metadataStr := c.PostForm("scientificMetadata")
+	if metadataStr == "{}" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Missing scientific metadata.",
+		})
+		return
+	}
+	// Parse  JSON string into the Metadata
+	var scientificMetadata map[string]any
+	err = json.Unmarshal([]byte(metadataStr), &scientificMetadata)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "body_invalid",
+			"message": "Failed to parse scientific metadata to JSON.",
+		})
+		return
+	}
+
+	// create a temporary cif file that will be used for a deposition
+	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "cif_invalid",
+			"message": "Failed to create a file to write new cif file.",
+		})
+		return
+	}
+	fileScientificMetaPath := fileScientificMeta.Name()
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "file_invalid",
+			"message": fmt.Sprintf("Failed to open file header: %v", err.Error()),
+		})
+		return
+	}
+	defer file.Close()
+
+	fileTmp, err := convertMultipartFileToFile(file)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "file_invalid",
+			"message": fmt.Sprintf("failed to open cif file to read coordinates: %v", err.Error()),
+		})
+		return
+	}
+	defer file.Close()
+
+	cifText, err := parser.PDBconvertFromFile(
+		scientificMetadata,
+		"",
+		"conversions.csv",
+		"mmcif_pdbx_v50.dic",
+		fileTmp,
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "conversion_to_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "writing_cif_fails",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.Header("Content-Type", "application/octet-stream")
+	c.FileAttachment(fileScientificMetaPath, "metadata.cif")
+
+	defer os.Remove(fileScientificMetaPath)
+}
+
+// Create handles the creation of a new deposition
+// @Summary Process deposition to OneDep
+// @Description Process a deposition in OneDep API.
+// @Tags deposition
+// @Accept application/json
+// @Produce json
+// @Param depID path string true "Deposition ID to which a file should be uploaded"
+// @Param jwtToken  formData string true "JWT token for OneDep API"
+// @Success 200 {object} onedep.CreatedDeposition "Deposition ID"
+// @Failure 400 {object} onedep.ResponseType "Error response"
+// @Failure 500 {object} onedep.ResponseType "Internal server error"
+// @Router /onedep/{depID}/process [post]
+func StartProcess(c *gin.Context) {
+	depID := c.Param("depID")
+	client := &http.Client{}
+	bearer := c.PostForm("jwtToken")
+	_, err := onedep.ProcessDeposition(client, depID, bearer)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"fileID": depID})
 }
 
 //	returns the current version of the depositor
@@ -224,12 +630,9 @@ func Create(c *gin.Context) {
 // @Tags version
 // @Produce json
 // @Success 200 {string} string "Depositior version"
-// @Failure 400 {object} map[string]interface{} "Error response"
-// @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /version [get]
 func GetVersion(c *gin.Context) {
 	c.JSON(http.StatusOK, version)
-
 }
 func main() {
 
@@ -245,6 +648,12 @@ func main() {
 
 	router.GET("/version", GetVersion)
 	router.POST("/onedep", Create)
+	router.POST("/onedep/:depID/file", AddFile)
+	router.POST("/onedep/:depID/metadata", AddMetadata)
+	router.POST("/onedep/:depID/pdb", AddCoordinates)
+	router.POST("/onedep/:depID/process", StartProcess)
+	router.POST("/onedep/metadata", DownloadMetadata)
+	router.POST("/onedep/pdb", DownloadCoordinatesWithMetadata)
 
-	router.Run("localhost:8080")
+	router.Run("localhost:" + PORT)
 }
