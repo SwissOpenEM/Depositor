@@ -71,8 +71,7 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	// email := body.Email
-	email := "sofya.laskina@epfl.ch" //remove later\
+	email := body.Email
 	var experiments []onedep.EmMethod
 	if exp, ok := onedep.EmMethods[body.Method]; ok {
 		experiments = []onedep.EmMethod{exp}
