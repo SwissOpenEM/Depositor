@@ -631,7 +631,7 @@ func StartProcess(c *gin.Context) {
 // @Success 200 {string} string "Depositior version"
 // @Router /version [get]
 func GetVersion(c *gin.Context) {
-	c.JSON(http.StatusOK, version)
+	c.JSON(http.StatusOK, gin.H{"version": version})
 }
 func main() {
 
