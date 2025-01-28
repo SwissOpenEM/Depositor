@@ -2,6 +2,7 @@ package onedep
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -9,97 +10,33 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"strconv"
 )
 
-// extracts the id of the deposition from the response
-func decodeDid(resp *http.Response) (string, error) {
-	type DidType struct {
-		Did string `json:"id"`
-	}
-	var d DidType
-	decoder := json.NewDecoder(resp.Body)
-	err := decoder.Decode(&d)
-
-	if err != nil {
-		return "", fmt.Errorf("could not decode id from deposition entry: %v", err)
-	}
-	return d.Did, nil
-}
-
-// extracts the id of the file from the response
-func decodeFid(resp *http.Response) (string, error) {
-	type FidType struct {
-		Fid int32 `json:"id"`
-	}
-	var f FidType
-	decoder := json.NewDecoder(resp.Body)
-	_ = decoder.Decode(&f)
-	var result map[string]interface{}
-	_ = json.NewDecoder(resp.Body).Decode(&result)
-
-	// errors point to the entries still missing for the whole deposition and do not represent the error for this exact request
-	// if err != nil {
-	// 	 return "", fmt.Errorf("could not decode id from deposition entry: %v", err)
-	// }
-
-	return fmt.Sprintf("%d", f.Fid), nil
-}
-
-func decodeResponse(resp *http.Response) ResponseType {
-
-	type ResponseOneDep struct {
-		Code    string           `json:"code"`
-		Message string           `json:"message"`
-		Extras  map[string][]any `json:"extras,omitempty"` // should add this?
-	}
-	var rOneDep ResponseOneDep
+// decodes  the response
+func decodeResponse[T FileResponse | DepositionResponse](resp *http.Response) (T, error) {
+	var rOneDep T
 	decoder := json.NewDecoder(resp.Body)
 	err := decoder.Decode(&rOneDep)
 	if err != nil {
-		return ResponseType{
-			Status:  "cannot_decode",
-			Message: err.Error(),
-		}
+		return rOneDep, err
 	}
-	// fmt.Println(rOneDep.Extras) // for debugging
-	return ResponseType{
-		Status:  rOneDep.Code,
-		Message: fmt.Sprintf(rOneDep.Message),
-	}
+	return rOneDep, nil
 }
 
-// reads the header of mrc files and extracts the pixel spacing
-func getMeta(file multipart.File) ([3]float32, error) {
-	var pixelSpacing [3]float32
-	// https://bio3d.colorado.edu/imod/betaDoc/mrc_format.txt
-	// words I care about: Mode(4),	sampling along axes of unit cell (8-10), cell dimensions in angstroms(11-13) --> pixel spacing = cell dim/sampling
-	header := make([]byte, headerSize)
-	_, err := file.Read(header)
-	if err != nil {
-		return pixelSpacing, fmt.Errorf("failed to read header: %v", err)
-	}
-	_, err = file.Seek(0, io.SeekStart)
-	if err != nil {
-		return pixelSpacing, err
-	}
-	var mode uint32 = binary.LittleEndian.Uint32(header[modeWord*wordSize : modeWord*wordSize+wordSize])
-	var cellDim [3]float32
-	if castFunc, ok := typeMap[mode]; ok {
-		for i := 0; i < 3; i++ {
-			cellDim[i] = castFunc(header[(cellDimWord+i)*wordSize : (cellDimWord+i)*wordSize+wordSize]).(float32)
-			sampling := binary.LittleEndian.Uint32(header[(samplingWord+i)*wordSize : (samplingWord+i)*wordSize+wordSize])
-			// Calculate pixel spacing
-			pixelSpacing[i] = cellDim[i] / float32(sampling)
-		}
-	} else {
-		return pixelSpacing, fmt.Errorf("mode in the header is not described in EM community: %v", err)
-	}
-	return pixelSpacing, nil
-}
+// func decodeAnyResponse(resp *http.Response) (map[string]any, error) {
+// 	var rOneDep map[string]any
+// 	decoder := json.NewDecoder(resp.Body)
+// 	err := decoder.Decode(&rOneDep)
+// 	if err != nil {
+// 		return rOneDep, err
+// 	}
+// 	return rOneDep, nil
+// }
 
 // sends a request to OneDep to create a new deposition
-func CreateDeposition(client *http.Client, userInput UserInfo, token string) (Deposition, *ResponseType) {
-	var deposition Deposition
+func CreateDeposition(client *http.Client, userInput UserInfo, token string) (DepositionResponse, *ResponseType) {
+	var deposition DepositionResponse
 	// Convert the user input to JSON
 	jsonInput, err := json.Marshal(userInput)
 	if err != nil {
@@ -128,71 +65,124 @@ func CreateDeposition(client *http.Client, userInput UserInfo, token string) (De
 		}
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 || resp.StatusCode == 201 { // even not created instance, when e.g country is set wrong this seems to return a 200 with an error.
-		// if responseDecoded.Message == "" { // now it would return  200 status code for hen there is an error when country is specified wrong
-		deposition.Id, err = decodeDid(resp)
-		if err != nil {
-			return deposition, &ResponseType{
-				Status:  "couldn't decode deposition id",
-				Message: err.Error(),
-			}
+	depositionResponse, err := decodeResponse[DepositionResponse](resp)
+	if err != nil {
+		return deposition, &ResponseType{
+			Status:  "couldn't decode deposition response",
+			Message: err.Error(),
 		}
-
-		return deposition, nil
 	}
-	responseDecoded := decodeResponse(resp)
-	return deposition, &responseDecoded
+	if resp.StatusCode == 200 || resp.StatusCode == 201 { // even not created instance, when e.g country is set wrong this seems to return a 200 with an error.
+		return depositionResponse, nil
+	} else {
+		return deposition, &ResponseType{
+			Status:  depositionResponse.Code,
+			Message: depositionResponse.Message,
+		}
+	}
 }
 
-// prepare deposition instance, body request and multipart writer
-func prepareFileDeposition(deposition string, fileUpload FileUpload) (DepositionFile, *bytes.Buffer, *multipart.Writer, error) {
-	var fD DepositionFile
-	fD.DId = deposition
-	fD.Name = fileUpload.Name
-	fD.Type = fileUpload.Type
-	fD.ContourLevel = fileUpload.Contour
-	fD.Details = fileUpload.Details
+// creates a new instance of DepositionFile
+func NewDepositionFile(depositionID string, fileUpload FileUpload) *DepositionFile {
+	fD := DepositionFile{depositionID, 0, fileUpload.Name, fileUpload.Type, [3]float32{}, fileUpload.Contour, fileUpload.Details}
+	return &fD
+}
 
-	// create body
+// reads the header of mrc files and extracts the pixel spacing, unpacks if was .gz file
+func (fD *DepositionFile) getMeta(file multipart.File, gzipped bool) error {
+	// https://bio3d.colorado.edu/imod/betaDoc/mrc_format.txt
+	// words we need: Mode(4), sampling along axes of unit cell (8-10), cell dimensions in angstroms(11-13) --> pixel spacing = cell dim/sampling
+	header := make([]byte, headerSize)
+	var reader io.Reader
+
+	if gzipped {
+		gzReader, err := gzip.NewReader(file)
+		if err != nil {
+			return fmt.Errorf("failed to decompress: %v", err.Error())
+		}
+		defer gzReader.Close()
+		reader = gzReader
+	} else {
+		reader = file
+	}
+	_, err := reader.Read(header)
+	if err != nil {
+		return fmt.Errorf("failed to read header: %v", err.Error())
+	}
+
+	_, err = file.Seek(0, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	var mode uint32 = binary.LittleEndian.Uint32(header[modeWord*wordSize : modeWord*wordSize+wordSize])
+	var cellDim [3]float32
+	if castFunc, ok := typeMap[mode]; ok {
+		for i := 0; i < 3; i++ {
+			cellDim[i] = castFunc(header[(cellDimWord+i)*wordSize : (cellDimWord+i)*wordSize+wordSize]).(float32)
+			sampling := binary.LittleEndian.Uint32(header[(samplingWord+i)*wordSize : (samplingWord+i)*wordSize+wordSize])
+			// Calculate pixel spacing
+			fD.PixelSpacing[i] = cellDim[i] / float32(sampling)
+		}
+	} else {
+		return fmt.Errorf("mode in the header is not described in EM community: %v", err)
+	}
+	return nil
+}
+
+// assigns specific values to DepositionFile, creates an instance for request body and multipart writer for file
+func (fD *DepositionFile) PrepareDeposition() (*FileDepositionRequest, *ResponseType) {
 	body := new(bytes.Buffer)
 	writer := multipart.NewWriter(body)
-	err := writer.WriteField("name", fD.Name)
-	if err != nil {
-		return fD, body, writer, err
-	}
-	err = writer.WriteField("type", fD.Type)
-	if err != nil {
-		return fD, body, writer, err
-	}
-	return fD, body, writer, err
-}
+	fDreq := FileDepositionRequest{body, writer}
 
-// sends a request to OneDep to add multipart files to an existing deposition with id
-func AddFileToDeposition(client *http.Client, deposition string, fileUpload FileUpload, file multipart.File, token string) (DepositionFile, *ResponseType) {
-
-	fD, body, writer, err := prepareFileDeposition(deposition, fileUpload)
+	err := fDreq.Writer.WriteField("name", fD.Name)
 	if err != nil {
-		return fD, &ResponseType{
+		return &fDreq, &ResponseType{
 			Status:  "request_body_issue",
 			Message: err.Error(),
 		}
 	}
+
+	err = fDreq.Writer.WriteField("type", fD.Type)
+	if err != nil {
+		return &fDreq, &ResponseType{
+			Status:  "request_body_issue",
+			Message: err.Error(),
+		}
+	}
+	return &fDreq, nil
+}
+
+// if this file is og "map" type, opens the header and extracts pixel spacing va;ue
+func (fD *DepositionFile) ReadHeaderIfMap(file multipart.File, extension string) *ResponseType {
+	var err error
 	// extract pixel spacing necessary to upload metadata
 	for j := range NeedMeta {
-		if fileUpload.Type == NeedMeta[j] {
-			pixelSpacing, err := getMeta(file)
+		if fD.Type == NeedMeta[j] {
+			switch extension {
+			case "gz":
+				err = fD.getMeta(file, true)
+			case "mrc":
+				err = fD.getMeta(file, false)
+			case "ccp4":
+				err = fD.getMeta(file, false)
+			default:
+				log.Printf("failed to open header: %v extension is not implemented; please provide it in OneDep manually!", extension)
+			}
 			if err != nil {
 				log.Printf("failed to extract pixel spacing: %v; please provide it in OneDep manually!", err)
 			}
-			fD.PixelSpacing = pixelSpacing
 		}
 	}
+	return nil
+}
 
-	//upload file
-	part, err := writer.CreateFormFile("file", fD.Name)
+// adds file to the multipart writer
+func (fD *DepositionFile) AddFileToRequest(client *http.Client, file multipart.File, fDreq *FileDepositionRequest) (*FileDepositionRequest, *ResponseType) {
+	//add file to the writer
+	part, err := fDreq.Writer.CreateFormFile("file", fD.Name)
 	if err != nil {
-		return fD, &ResponseType{
+		return fDreq, &ResponseType{
 			Status:  "request_file_issue",
 			Message: err.Error(),
 		}
@@ -200,67 +190,67 @@ func AddFileToDeposition(client *http.Client, deposition string, fileUpload File
 
 	_, err = io.Copy(part, file)
 	if err != nil {
-		return fD, &ResponseType{
+		return fDreq, &ResponseType{
 			Status:  "request_file_issue",
 			Message: err.Error(),
 		}
 	}
 
-	err = writer.Close()
+	err = fDreq.Writer.Close()
 	if err != nil {
-		return fD, &ResponseType{
+		return fDreq, &ResponseType{
 			Status:  "request_file_issue",
 			Message: err.Error(),
 		}
 	}
-	return UploadFile(client, fD, body, writer, token)
+	return fDreq, nil
 }
 
-func UploadFile(client *http.Client, fD DepositionFile, body *bytes.Buffer, writer *multipart.Writer, token string) (DepositionFile, *ResponseType) {
-
+// sends request to upload file to OneDep
+func (fD *DepositionFile) UploadFile(client *http.Client, fDreq *FileDepositionRequest, token string) (FileResponse, *ResponseType) {
+	var uploadedFile FileResponse
 	// Prepare the request
 	url := baseURL + fD.DId + "/files/"
-	req, err := http.NewRequest("POST", url, body)
+	req, err := http.NewRequest("POST", url, fDreq.Body)
 	if err != nil {
-		return fD, &ResponseType{
+		return uploadedFile, &ResponseType{
 			Status:  "request_issue",
 			Message: err.Error(),
 		}
 	}
-
 	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Content-Type", fDreq.Writer.FormDataContentType())
 
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		return fD, &ResponseType{
+		return uploadedFile, &ResponseType{
 			Status:  "request_error",
 			Message: fmt.Sprintf("error sending request to the server: %v", err),
 		}
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == 200 || resp.StatusCode == 201 {
-		fD.Id, err = decodeFid(resp)
-
-		if err != nil {
-			return fD, &ResponseType{
-				Status:  "decoding_error",
-				Message: fmt.Sprintf("error decoding File ID: %v", err),
-			}
+	decodedFileResponse, err := decodeResponse[FileResponse](resp)
+	if err != nil {
+		return uploadedFile, &ResponseType{
+			Status:  "decoding_error",
+			Message: fmt.Sprintf("error decoding File ID: %v", err),
 		}
-		return fD, nil
+	}
+	if resp.StatusCode == 200 || resp.StatusCode == 201 {
+		fD.Id = decodedFileResponse.Id
+		return decodedFileResponse, nil
 	} else {
-		responseDecoded := decodeResponse(resp)
-		return fD, &responseDecoded
-
+		return uploadedFile, &ResponseType{
+			Status:  "failed_upload",
+			Message: "some problem ", //decodedFileResponse.Errors,
+		}
 	}
 }
 
-// sends a request to OneDep to add files to an existing deposition with id
-func AddMetadataToFile(client *http.Client, fD DepositionFile, token string) (DepositionFile, *ResponseType) {
-
-	// Prepare metadata request
+// sends a request to OneDep to add files' metadata
+func (fD *DepositionFile) AddMetadataToFile(client *http.Client, token string) (FileResponse, *ResponseType) {
+	var uploadedFile FileResponse
 	data := map[string]interface{}{
 		"voxel": map[string]interface{}{
 			"spacing": map[string]float32{
@@ -268,22 +258,21 @@ func AddMetadataToFile(client *http.Client, fD DepositionFile, token string) (De
 				"y": fD.PixelSpacing[1],
 				"z": fD.PixelSpacing[2],
 			},
-			"contour": fD.ContourLevel, // There seems to be no way to extract it from header?
+			"contour": fD.ContourLevel,
 		},
-		"description": fD.Details,
+		"description": fD.Details, // Doesn't propagate in OneDep
 	}
-
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
-		return fD, &ResponseType{
+		return uploadedFile, &ResponseType{
 			Status:  "JSON_error",
 			Message: err.Error(),
 		}
 	}
-	urlFileMeta := baseURL + fD.DId + "/files/" + fD.Id + "/metadata"
+	urlFileMeta := baseURL + fD.DId + "/files/" + strconv.Itoa(fD.Id) + "/metadata"
 	req, err := http.NewRequest("POST", urlFileMeta, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return fD, &ResponseType{
+		return uploadedFile, &ResponseType{
 			Status:  "request_error",
 			Message: err.Error(),
 		}
@@ -295,18 +284,27 @@ func AddMetadataToFile(client *http.Client, fD DepositionFile, token string) (De
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		return fD, &ResponseType{
+		return uploadedFile, &ResponseType{
 			Status:  "request_error",
 			Message: fmt.Sprintf("error sending request to  to url %v: %v", urlFileMeta, err),
 		}
 	}
 	defer resp.Body.Close()
 
+	decodedFileResponse, err := decodeResponse[FileResponse](resp)
+	if err != nil {
+		return uploadedFile, &ResponseType{
+			Status:  "decoding_error",
+			Message: fmt.Sprintf("error decoding File ID: %v", err),
+		}
+	}
 	if resp.StatusCode == 200 || resp.StatusCode == 201 {
-		return fD, nil
+		return decodedFileResponse, nil
 	} else {
-		responseDecoded := decodeResponse(resp)
-		return fD, &responseDecoded
+		return uploadedFile, &ResponseType{
+			Status:  "failed_upload",
+			Message: "some problem ", //decodedFileResponse.Errors,
+		}
 	}
 }
 

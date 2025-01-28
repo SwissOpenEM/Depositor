@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/SwissOpenEM/Depositor/depositions/onedep"
 
@@ -53,7 +54,7 @@ func convertMultipartFileToFile(file multipart.File) (*os.File, error) {
 // @Accept application/json
 // @Produce json
 // @Param	request	body	onedep.RequestCreate	true "User information"
-// @Success 200 {object} onedep.CreatedDeposition "Success response with Deposition ID"
+// @Success 201 {object} onedep.DepositionResponse "Success response with Deposition ID"
 // @Failure 400 {object} onedep.ResponseType "Error response"
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
 // @Router /onedep [post]
@@ -102,7 +103,7 @@ func Create(c *gin.Context) {
 		})
 		return
 	} else {
-		c.JSON(http.StatusCreated, gin.H{"depID": deposition.Id})
+		c.JSON(http.StatusCreated, deposition)
 		return
 	}
 
@@ -118,7 +119,7 @@ func Create(c *gin.Context) {
 // @Param file formData []file true "File to upload" collectionFormat(multi)
 // @Param fileMetadata formData string true "File metadata as a JSON string"
 // @Param jwtToken formData string true "JWT token for OneDep API"
-// @Success 200 {object} onedep.UploadedFile "File ID"
+// @Success 200 {object} onedep.FileResponse "File ID"
 // @Failure 400 {object} onedep.ResponseType "Error response"
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
 // @Router /onedep/{depID}/file [post]
@@ -153,6 +154,8 @@ func AddFile(c *gin.Context) {
 		})
 		return
 	}
+	fileName := strings.Split(fileHeader.Filename, ".")
+	extension := fileName[len(fileName)-1]
 
 	file, err := fileHeader.Open()
 	if err != nil {
@@ -165,25 +168,43 @@ func AddFile(c *gin.Context) {
 	defer file.Close()
 
 	client := &http.Client{}
-	var fileDeposited onedep.DepositionFile
-	fileDeposited, errResp := onedep.AddFileToDeposition(client, depID, fileMetadata, file, bearer)
+
+	fD := onedep.NewDepositionFile(depID, fileMetadata)
+
+	fDReq, errResp := fD.PrepareDeposition()
 	if errResp != nil {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
-	// c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
+
+	errResp = fD.ReadHeaderIfMap(file, extension)
+	if errResp != nil {
+		c.JSON(http.StatusBadRequest, errResp)
+		return
+	}
+	fDReq, errResp = fD.AddFileToRequest(client, file, fDReq)
+	if errResp != nil {
+		c.JSON(http.StatusBadRequest, errResp)
+		return
+	}
+	uploadedFileDecoded, errResp := fD.UploadFile(client, fDReq, bearer)
+	if errResp != nil {
+		c.JSON(http.StatusBadRequest, errResp)
+		return
+	}
+
 	for j := range onedep.NeedMeta {
 		if fileMetadata.Type == onedep.NeedMeta[j] {
-			fileDeposited, errResp := onedep.AddMetadataToFile(client, fileDeposited, bearer)
+			uploadedFileDecoded, errResp = fD.AddMetadataToFile(client, bearer)
 			if errResp != nil {
 				c.JSON(http.StatusBadRequest, errResp)
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
+			c.JSON(http.StatusOK, uploadedFileDecoded)
 			return
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
+	c.JSON(http.StatusOK, uploadedFileDecoded)
 }
 
 // AddMetadata handles adding metadata to an existing deposition.
@@ -195,7 +216,7 @@ func AddFile(c *gin.Context) {
 // @Param depID path string true "Deposition ID to which a file should be uploaded"
 // @Param jwtToken formData string true "JWT token for OneDep API"
 // @Param scientificMetadata formData string true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
-// @Success 200 {object} onedep.UploadedFile "File ID"
+// @Success 200 {object} onedep.FileResponse "File ID"
 // @Failure 400 {object} onedep.ResponseType "Error response"
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
 // @Router /onedep/{depID}/metadata [post]
@@ -213,7 +234,7 @@ func AddMetadata(c *gin.Context) {
 	depID := c.Param("depID")
 	bearer := c.PostForm("jwtToken")
 
-	// FIX ME add a OSCEM SCHEMA
+	// FIX ME add an OSCEM SCHEMA
 	// Extract entries from multipart form
 	metadataStr := c.PostForm("scientificMetadata")
 	if metadataStr == "{}" {
@@ -280,14 +301,27 @@ func AddMetadata(c *gin.Context) {
 	}
 	defer cifFile.Close()
 
-	fileDeposited, errResp := onedep.AddFileToDeposition(client, depID, metadataFile, cifFile, bearer)
+	fD := onedep.NewDepositionFile(depID, metadataFile)
+
+	fDReq, errResp := fD.PrepareDeposition()
+	if errResp != nil {
+		c.JSON(http.StatusBadRequest, errResp)
+		return
+	}
+
+	fDReq, errResp = fD.AddFileToRequest(client, cifFile, fDReq)
+	if errResp != nil {
+		c.JSON(http.StatusBadRequest, errResp)
+		return
+	}
+	uploadedFile, errResp := fD.UploadFile(client, fDReq, bearer)
 	if errResp != nil {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
 	defer os.Remove(fileScientificMetaPath)
 
-	c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
+	c.JSON(http.StatusOK, uploadedFile)
 }
 
 // AddCoordinates handles adding coordinates files to an existing deposition.
@@ -300,7 +334,7 @@ func AddMetadata(c *gin.Context) {
 // @Param jwtToken formData string true "JWT token for OneDep API"
 // @Param file formData file true "File to upload"
 // @Param scientificMetadata formData string true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
-// @Success 200 {object} onedep.UploadedFile "File ID"
+// @Success 200 {object} onedep.FileResponse "File ID"
 // @Failure 400 {object} onedep.ResponseType "Error response"
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
 // @Router /onedep/{depID}/pdb [post]
@@ -406,28 +440,29 @@ func AddCoordinates(c *gin.Context) {
 		})
 	}
 	defer cifFile.Close()
-	fileDeposited, errResp := onedep.AddFileToDeposition(client, depID, mockFileUpload, cifFile, bearer)
+
+	fD := onedep.NewDepositionFile(depID, mockFileUpload)
+
+	fDReq, errResp := fD.PrepareDeposition()
 	if errResp != nil {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
-	defer file.Close()
-	// add in web UI no such fields for coordinates
 
-	// if fileMetadata.Details != "" {
-	// 	fileDeposited, errResp := onedep.AddMetadataToFile(client, fileDeposited, bearer)
-	// 	if errResp != nil {
-	// 		c.JSON(http.StatusBadRequest, errResp)
-	// 		return
-	// 	}
-	// 	c.JSON(http.StatusOK, gin.H{"depID": depID, "fileID": fileDeposited.Id})
-	// }
-
+	fDReq, errResp = fD.AddFileToRequest(client, cifFile, fDReq)
+	if errResp != nil {
+		c.JSON(http.StatusBadRequest, errResp)
+		return
+	}
+	uploadedFile, errResp := fD.UploadFile(client, fDReq, bearer)
+	if errResp != nil {
+		c.JSON(http.StatusBadRequest, errResp)
+		return
+	}
 	defer os.Remove(fileScientificMetaPath)
-	c.JSON(http.StatusOK, gin.H{
-		"depID":  depID,
-		"fileID": fileDeposited.Id,
-	})
+
+	c.JSON(http.StatusOK, uploadedFile)
+
 }
 
 // DownloadMetadata handles getting a cif file with metadata.

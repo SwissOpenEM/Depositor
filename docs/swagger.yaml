@@ -4,6 +4,138 @@ definitions:
       depID:
         type: string
     type: object
+  onedep.DepositionResponse:
+    properties:
+      bmrb_id:
+        type: string
+      code:
+        type: string
+      created:
+        type: string
+      email:
+        type: string
+      emdb_id:
+        type: string
+      errors:
+        $ref: '#/definitions/onedep.OneDepError'
+      experiments: {}
+      hold_exp_date:
+        type: string
+      id:
+        type: string
+      last_login:
+        type: string
+      message:
+        type: string
+      pdb_id:
+        type: string
+      site:
+        type: string
+      site_url:
+        type: string
+      status:
+        $ref: '#/definitions/onedep.Status'
+      title:
+        type: string
+    type: object
+  onedep.FileResponse:
+    properties:
+      created:
+        type: string
+      errors:
+        type: string
+      id:
+        type: integer
+      metadata:
+        additionalProperties: {}
+        type: object
+      name:
+        type: string
+      type:
+        $ref: '#/definitions/onedep.OneDepType'
+      warnings:
+        type: string
+    type: object
+  onedep.OneDepError:
+    properties:
+      code:
+        type: string
+      extras:
+        additionalProperties:
+          items: {}
+          type: array
+        type: object
+      message:
+        type: string
+    type: object
+  onedep.OneDepType:
+    enum:
+    - add-map
+    - co-cif
+    - co-pdb
+    - fsc-xml
+    - half-map
+    - img-emdb
+    - layer-lines
+    - mask-map
+    - nm-aux-amb
+    - nm-aux-gro
+    - nm-pea-any
+    - nm-res-amb
+    - nm-res-bio
+    - nm-res-cha
+    - nm-res-cns
+    - nm-res-cya
+    - nm-res-dyn
+    - nm-res-gro
+    - nm-res-isd
+    - nm-res-oth
+    - nm-res-ros
+    - nm-res-syb
+    - nm-res-xpl
+    - nm-shi
+    - nm-uni-nef
+    - nm-uni-str
+    - vo-map
+    - xa-mat
+    - xa-par
+    - xa-top
+    - xs-cif
+    - xs-mtz
+    type: string
+    x-enum-varnames:
+    - ADD_MAP
+    - CO_CIF
+    - CO_PDB
+    - FSC_XML
+    - HALF_MAP
+    - IMG_EMDB
+    - LAYER_LINES
+    - MASK_MAP
+    - NM_AUX_AMB
+    - NM_AUX_GRO
+    - NM_PEA_ANY
+    - NM_RES_AMB
+    - NM_RES_BIO
+    - NM_RES_CHA
+    - NM_RES_CNS
+    - NM_RES_CYA
+    - NM_RES_DYN
+    - NM_RES_GRO
+    - NM_RES_ISD
+    - NM_RES_OTH
+    - NM_RES_ROS
+    - NM_RES_SYB
+    - NM_RES_XPL
+    - NM_SHI
+    - NM_UNI_NEF
+    - NM_UNI_STR
+    - VO_MAP
+    - XA_MAT
+    - XA_PAR
+    - XA_TOP
+    - XS_CIF
+    - XS_MTZ
   onedep.RequestCreate:
     properties:
       country:
@@ -34,14 +166,40 @@ definitions:
       status:
         type: string
     type: object
-  onedep.UploadedFile:
-    properties:
-      FileID:
-        description: add metadata?
-        type: string
-      depID:
-        type: string
-    type: object
+  onedep.Status:
+    enum:
+    - auco
+    - auth
+    - auxs
+    - auxu
+    - dep
+    - hold
+    - hpub
+    - obs
+    - polc
+    - proc
+    - rel
+    - repl
+    - reup
+    - wait
+    - wdrn
+    type: string
+    x-enum-varnames:
+    - AUCO
+    - AUTH
+    - AUXS
+    - AUXU
+    - DEP
+    - HOLD
+    - HPUB
+    - OBS
+    - POLC
+    - PROC
+    - REL
+    - REPL
+    - REUP
+    - WAIT
+    - WDRN
 info:
   contact: {}
   description: Rest API for communication between SciCat frontend and depositor backend.
@@ -65,10 +223,10 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: Success response with Deposition ID
           schema:
-            $ref: '#/definitions/onedep.CreatedDeposition'
+            $ref: '#/definitions/onedep.DepositionResponse'
         "400":
           description: Error response
           schema:
@@ -115,7 +273,7 @@ paths:
         "200":
           description: File ID
           schema:
-            $ref: '#/definitions/onedep.UploadedFile'
+            $ref: '#/definitions/onedep.FileResponse'
         "400":
           description: Error response
           schema:
@@ -157,7 +315,7 @@ paths:
         "200":
           description: File ID
           schema:
-            $ref: '#/definitions/onedep.UploadedFile'
+            $ref: '#/definitions/onedep.FileResponse'
         "400":
           description: Error response
           schema:
@@ -202,7 +360,7 @@ paths:
         "200":
           description: File ID
           schema:
-            $ref: '#/definitions/onedep.UploadedFile'
+            $ref: '#/definitions/onedep.FileResponse'
         "400":
           description: Error response
           schema:
