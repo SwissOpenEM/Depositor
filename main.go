@@ -24,8 +24,8 @@ import (
 //	@description	Rest API for communication between SciCat frontend and depositor backend. Backend service enables deposition of datasets to OneDep API.
 
 var version string = "DEV"
-var PORT string = getEnv("PORT", "8080")
-var ALLOW_ORIGINS string = getEnv("ALLOW_ORIGINS", "http://localhost:4202")
+var PORT string = getEnv("PORT", "8888")
+var ALLOW_ORIGINS string = getEnv("ALLOW_ORIGINS", "http://localhost:4200")
 
 func getEnv(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
@@ -677,7 +677,7 @@ func GetVersion(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"version": version})
 }
 func main() {
-
+	fmt.Println(ALLOW_ORIGINS, PORT)
 	router := gin.Default()
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{ALLOW_ORIGINS},
@@ -697,5 +697,5 @@ func main() {
 	router.POST("/onedep/metadata", DownloadMetadata)
 	router.POST("/onedep/pdb", DownloadCoordinatesWithMetadata)
 
-	router.Run("localhost:" + PORT)
+	router.Run(":" + PORT)
 }

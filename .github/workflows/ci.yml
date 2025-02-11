@@ -5,9 +5,7 @@ name: Build Depositor
 
 on:
   push:
-    branches:
-      - main
-      - *-release
+    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
@@ -19,7 +17,7 @@ jobs:
       - uses: actions/checkout@v2.3.4
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.21'
+          go-version: '1.22.6'
       - name: generate
         run: go generate ./...
       - name: golangci-lint
@@ -40,5 +38,6 @@ jobs:
     - name: Build
       run: go build -v ./...
 
+      # need to add tests
     - name: Test
       run: go test -v ./...
