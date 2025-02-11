@@ -697,5 +697,8 @@ func main() {
 	router.POST("/onedep/metadata", DownloadMetadata)
 	router.POST("/onedep/pdb", DownloadCoordinatesWithMetadata)
 
-	router.Run(":" + PORT)
+	if err := router.Run(":" + PORT); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to start server: %v\n", err)
+		os.Exit(1)
+	}
 }
