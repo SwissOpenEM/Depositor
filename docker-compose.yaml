@@ -1,0 +1,14 @@
+services:
+  depositor:
+    image: ghcr.io/swissopenem/depositor:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8888:8080"
+    environment:
+      - PORT=8080
+      - ALLOW_ORIGINS=${SCICAT_FRONTEND_URL}
+    volumes:
+      - ./conversions.csv:/app/conversions.csv
+      - ./mmcif_pdbx_v50.dic:/app/mmcif_pdbx_v50.dic

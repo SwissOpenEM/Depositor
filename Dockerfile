@@ -16,6 +16,7 @@ COPY conversions.csv /app/conversions.csv
 COPY mmcif_pdbx_v50.dic /app/mmcif_pdbx_v50.dic
 COPY depositions/onedep ./depositions/onedep
 COPY docs ./docs
+COPY README.md /app/README.md
 
 ARG VERSION=v.0.1.0
 
@@ -34,7 +35,7 @@ ENV ALLOW_ORIGINS=http://localhost:4200
 COPY --from=builder /app/depositor /app/depositor
 COPY --from=builder /app/conversions.csv /app/conversions.csv
 COPY --from=builder /app/mmcif_pdbx_v50.dic /app/mmcif_pdbx_v50.dic
-
+COPY --from=builder /app/README.md /app/README.md
 
 EXPOSE 8888
 # Run
