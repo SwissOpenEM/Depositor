@@ -24,16 +24,6 @@ func decodeResponse[T FileResponse | DepositionResponse](resp *http.Response) (T
 	return rOneDep, nil
 }
 
-// func decodeAnyResponse(resp *http.Response) (map[string]any, error) {
-// 	var rOneDep map[string]any
-// 	decoder := json.NewDecoder(resp.Body)
-// 	err := decoder.Decode(&rOneDep)
-// 	if err != nil {
-// 		return rOneDep, err
-// 	}
-// 	return rOneDep, nil
-// }
-
 // sends a request to OneDep to create a new deposition
 func CreateDeposition(client *http.Client, userInput UserInfo, token string) (DepositionResponse, *ResponseType) {
 	var deposition DepositionResponse
@@ -153,7 +143,7 @@ func (fD *DepositionFile) PrepareDeposition() (*FileDepositionRequest, *Response
 	return &fDreq, nil
 }
 
-// if this file is og "map" type, opens the header and extracts pixel spacing va;ue
+// if this file is of "map" type, opens the header and extracts pixel spacing value
 func (fD *DepositionFile) ReadHeaderIfMap(file multipart.File, extension string) *ResponseType {
 	var err error
 	// extract pixel spacing necessary to upload metadata

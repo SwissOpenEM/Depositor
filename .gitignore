@@ -397,8 +397,8 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
-
+.vscode/
 bearer.jwt
 dist/
-mmcif_pdbx_v50.dic
-conversions.csv
+# mmcif_pdbx_v50.dic
+# conversions.csv
