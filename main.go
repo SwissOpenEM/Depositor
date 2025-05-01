@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	b64 "encoding/base64"
 	"encoding/json"
@@ -30,6 +31,7 @@ import (
 var version string = "DEV"
 var PORT string = getEnv("PORT", "8080")
 var ALLOW_ORIGINS string = getEnv("ALLOW_ORIGINS", "http://localhost:4201")
+var PYTHON string = getEnv("PYTHON", "python3")
 
 func getEnv(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
@@ -64,7 +66,7 @@ func IsValidJSON(str string) bool {
 	return json.Unmarshal([]byte(str), &js) == nil
 }
 
-func IsGzipped(reader *os.File) (bool, error) {
+func IsGzipped(reader io.Reader) (bool, error) {
 	bReader := bufio.NewReader(reader)
 	testBytes, err := bReader.Peek(64) //read a few bytes without consuming
 	if err != nil {
@@ -165,8 +167,8 @@ func AddFile(c *gin.Context) {
 	}
 	depID := c.Param("depID")
 	bearer := c.PostForm("jwtToken")
-	fileHeader := c.Request.MultipartForm.File["file"][0] //file
-	metadataFilesStr := c.PostForm("fileMetadata")        //files Metadata
+	cooFile := c.Request.MultipartForm.File["file"][0] //file
+	metadataFilesStr := c.PostForm("fileMetadata")     //files Metadata
 
 	if metadataFilesStr == "{}" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -185,10 +187,10 @@ func AddFile(c *gin.Context) {
 		})
 		return
 	}
-	fileName := strings.Split(fileHeader.Filename, ".")
+	fileName := strings.Split(cooFile.Filename, ".")
 	extension := fileName[len(fileName)-1]
 
-	file, err := fileHeader.Open()
+	file, err := cooFile.Open()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "file_header_invalid",
@@ -286,7 +288,7 @@ func AddMetadata(c *gin.Context) {
 		return
 	}
 	// create a temporary cif file that will be used for a deposition
-	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
+	finalCif, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "cif_creation_fails",
@@ -294,7 +296,7 @@ func AddMetadata(c *gin.Context) {
 		})
 		return
 	}
-	fileScientificMetaPath := fileScientificMeta.Name()
+	finalCifPath := finalCif.Name()
 
 	// convert OSCEM-JSON to mmCIF
 	cifText, err := parser.EMDBconvert(
@@ -310,7 +312,7 @@ func AddMetadata(c *gin.Context) {
 		})
 		return
 	}
-	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	err = parser.WriteCif(cifText, finalCifPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "writing_cif_fails",
@@ -323,7 +325,7 @@ func AddMetadata(c *gin.Context) {
 		Name: "metadata.cif",
 		Type: "co-cif", // FIX ME add appropriate type once it's implemented in OneDep API
 	}
-	cifFile, err := os.Open(fileScientificMetaPath)
+	cifFile, err := os.Open(finalCifPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, &onedep.ResponseType{
 			Status:  "cif_file_issue",
@@ -350,7 +352,7 @@ func AddMetadata(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
-	defer os.Remove(fileScientificMetaPath)
+	defer os.Remove(finalCifPath)
 
 	c.JSON(http.StatusOK, uploadedFile)
 }
@@ -381,7 +383,7 @@ func AddCoordinates(c *gin.Context) {
 
 	depID := c.Param("depID")
 	bearer := c.PostForm("jwtToken")
-	fileHeader := c.Request.MultipartForm.File["file"][0] //file
+	cooFile := c.Request.MultipartForm.File["file"][0]
 
 	// parse extracted metadata from SciCat
 	metadataStr := c.PostForm("scientificMetadata")
@@ -402,19 +404,8 @@ func AddCoordinates(c *gin.Context) {
 		})
 		return
 	}
-
-	// create a temporary cif file that will be used for a deposition
-	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "cif_invalid",
-			"message": "Failed to create a file to write new cif file.",
-		})
-		return
-	}
-	fileScientificMetaPath := fileScientificMeta.Name()
-
-	file, err := fileHeader.Open()
+	// open the multipart file header
+	fMP, err := cooFile.Open()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "file_invalid",
@@ -422,9 +413,9 @@ func AddCoordinates(c *gin.Context) {
 		})
 		return
 	}
-	defer file.Close()
+	defer fMP.Close()
 
-	passedName := fileHeader.Filename
+	passedName := cooFile.Filename
 	var isPDB = false
 	passedNameChunks := strings.Split(passedName, ".")
 	for i := range passedNameChunks {
@@ -432,19 +423,20 @@ func AddCoordinates(c *gin.Context) {
 			isPDB = true
 		}
 	}
-	fileTmp, err := convertMultipartFileToFile(file)
+	f := io.Reader(fMP)
+	fConv, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "file_invalid",
-			"message": fmt.Sprintf("failed to open cif file to read coordinates: %v", err.Error()),
+			"message": fmt.Sprintf("failed to create cif file to combine metadata and coordinates: %v", err.Error()),
 		})
 		return
 	}
-	defer file.Close()
 
-	cifFileForConverter := fileTmp // set file to be reused for untaring un-pdb-ing and then to use for conversion
+	cifFileForConverterPath := fConv.Name()
+	defer fConv.Close()
 
-	gzipped, err := IsGzipped(fileTmp)
+	gzipped, err := IsGzipped(f)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "file_invalid",
@@ -453,7 +445,16 @@ func AddCoordinates(c *gin.Context) {
 		return
 	}
 	if gzipped {
-		_, err = fileTmp.Seek(0, io.SeekStart)
+		seeker, ok := f.(io.Seeker)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"status":  "file_invalid",
+				"message": "file does not support seeking",
+			})
+			return
+		}
+
+		_, err := seeker.Seek(0, io.SeekStart)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"status":  "file_invalid",
@@ -462,7 +463,7 @@ func AddCoordinates(c *gin.Context) {
 			return
 		}
 
-		gzipReader, err := gzip.NewReader(fileTmp)
+		gzipReader, err := gzip.NewReader(f)
 		if err != nil {
 
 			c.JSON(http.StatusBadRequest, gin.H{
@@ -473,42 +474,86 @@ func AddCoordinates(c *gin.Context) {
 		}
 		defer gzipReader.Close()
 
-		// create a temporary cif file that will be used for a deposition
-		cifFileForConverter, err = os.CreateTemp("", "metadata.cif")
+		_, err = io.Copy(fConv, gzipReader)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"status":  "file_invalid",
-				"message": fmt.Sprintf("failed to create cif file to combine metadata and coordinates: %v", err.Error()),
+				"message": fmt.Sprintf("failed to copy untared coordinates to temporary cif file: %v", err.Error()),
 			})
 			return
 		}
 
-		// fileUncompressed := cifFileForConverter.Name()
-		_, err = io.Copy(cifFileForConverter, gzipReader)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "file_invalid",
-				"message": fmt.Sprintf("failed to copy coordinates to temporary cif file: %v", err.Error()),
-			})
-			return
-		}
-	} else if isPDB {
-		cPy := exec.Command("pdb_extract.py -EM -iPDB " + cifFileForConverter.Name() + " -o " + fileScientificMetaPath)
-		err := cPy.Run()
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "pdb_invalid",
-				"message": fmt.Sprintf("failed to convert pdb to mmCIF: %v", err.Error()),
-			})
-		}
-
+		f = fConv
 	}
-	cifText, err := parser.PDBconvertFromFile(
+	if isPDB {
+		//need to save file locally first
+		if !gzipped {
+			_, err := io.Copy(fConv, f)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"status":  "file_invalid",
+					"message": fmt.Sprintf("failed to copy coordinates to temporary cif file: %v", err.Error()),
+				})
+				return
+			}
+			fConv.Close()
+			f = fConv
+		}
+		pythonExecCh := make(chan struct {
+			errorMsg string
+			err      error
+		})
+
+		go func() {
+			cPy := exec.Command(PYTHON, "scripts/bin/pdb_extract.py", "-EM", "-iPDB", cifFileForConverterPath, "-o", cifFileForConverterPath)
+
+			var outputBuffer bytes.Buffer
+			cPy.Stdout = &outputBuffer
+			cPy.Stderr = &outputBuffer
+
+			err := cPy.Run()
+
+			if err != nil {
+				pythonExecCh <- struct {
+					errorMsg string
+					err      error
+				}{outputBuffer.String(), err}
+				return
+
+			}
+
+			pythonExecCh <- struct {
+				errorMsg string
+				err      error
+			}{outputBuffer.String(), nil}
+
+			return
+		}()
+
+		// Wait for processing to finish
+		pyExec := <-pythonExecCh
+		if pyExec.err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"status":  "file_invalid",
+				"message": fmt.Sprintf("failed to convert pdb to mmCIF: %v\nOutput: %s", pyExec.err.Error(), pyExec.errorMsg),
+			})
+			return
+		}
+		// read converted file again
+		f, err = os.Open(cifFileForConverterPath)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"status":  "pdb_invalid_2",
+				"message": fmt.Sprintf("pdb_extract conversion from pdb to cif failed to write a file: %v", err.Error()),
+			})
+		}
+	}
+	cifText, err := parser.PDBconvertFromReader(
 		scientificMetadata,
 		"",
 		"data/conversions.csv",
 		"data/mmcif_pdbx_v50.dic",
-		cifFileForConverter,
+		f, // changed the oscem converter
 	)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -517,10 +562,9 @@ func AddCoordinates(c *gin.Context) {
 		})
 		return
 	}
-
 	// defer os.Remove(fileUncompressed)
 
-	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	err = parser.WriteCif(cifText, cifFileForConverterPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "writing_cif_fails",
@@ -528,14 +572,13 @@ func AddCoordinates(c *gin.Context) {
 		})
 		return
 	}
-
 	client := &http.Client{}
 	mockFileUpload := onedep.FileUpload{
 		Name:    "coordinates.cif",
 		Type:    "co-cif",
 		Details: "",
 	}
-	cifFile, err := os.Open(fileScientificMetaPath)
+	cifFile, err := os.Open(cifFileForConverterPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, &onedep.ResponseType{
 			Status:  "cif_file_issue",
@@ -545,13 +588,11 @@ func AddCoordinates(c *gin.Context) {
 	defer cifFile.Close()
 
 	fD := onedep.NewDepositionFile(depID, mockFileUpload)
-
 	fDReq, errResp := fD.PrepareDeposition()
 	if errResp != nil {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
-
 	fDReq, errResp = fD.AddFileToRequest(client, cifFile, fDReq)
 	if errResp != nil {
 		c.JSON(http.StatusBadRequest, errResp)
@@ -562,7 +603,7 @@ func AddCoordinates(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
-	defer os.Remove(fileScientificMetaPath)
+	//defer os.Remove(cifFileForConverterPath)
 
 	c.JSON(http.StatusOK, uploadedFile)
 
@@ -591,7 +632,7 @@ func DownloadMetadata(c *gin.Context) {
 		return
 	}
 	// create a temporary cif file that will be used for a deposition
-	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
+	finalCif, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "cif_creation_fails",
@@ -599,7 +640,7 @@ func DownloadMetadata(c *gin.Context) {
 		})
 		return
 	}
-	fileScientificMetaPath := fileScientificMeta.Name()
+	finalCifPath := finalCif.Name()
 
 	// convert OSCEM-JSON to mmCIF
 	cifText, err := parser.EMDBconvert(
@@ -615,7 +656,7 @@ func DownloadMetadata(c *gin.Context) {
 		})
 		return
 	}
-	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	err = parser.WriteCif(cifText, finalCifPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "writing_cif_fails",
@@ -625,9 +666,9 @@ func DownloadMetadata(c *gin.Context) {
 	}
 
 	c.Header("Content-Type", "application/octet-stream")
-	c.FileAttachment(fileScientificMetaPath, "metadata.cif")
+	c.FileAttachment(finalCifPath, "metadata.cif")
 
-	defer os.Remove(fileScientificMetaPath)
+	defer os.Remove(finalCifPath)
 
 }
 
@@ -644,6 +685,7 @@ func DownloadMetadata(c *gin.Context) {
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
 // @Router /onedep/pdb [post]
 func DownloadCoordinatesWithMetadata(c *gin.Context) {
+
 	err := c.Request.ParseMultipartForm(10 << 20)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -653,9 +695,9 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 		return
 	}
 
-	fileHeader := c.Request.MultipartForm.File["file"][0]
+	cooFile := c.Request.MultipartForm.File["file"][0]
 
-	// Extract entries from multipart form
+	// parse extracted metadata from SciCat
 	metadataStr := c.PostForm("scientificMetadata")
 	if metadataStr == "{}" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -664,7 +706,7 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 		})
 		return
 	}
-	// Parse  JSON string into the Metadata
+	// Parse  JSON string into the OSCEM format
 	var scientificMetadata map[string]any
 	err = json.Unmarshal([]byte(metadataStr), &scientificMetadata)
 	if err != nil {
@@ -674,19 +716,8 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 		})
 		return
 	}
-
-	// create a temporary cif file that will be used for a deposition
-	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "cif_invalid",
-			"message": "Failed to create a file to write new cif file.",
-		})
-		return
-	}
-	fileScientificMetaPath := fileScientificMeta.Name()
-
-	file, err := fileHeader.Open()
+	// open the multipart file header
+	fMP, err := cooFile.Open()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "file_invalid",
@@ -694,9 +725,30 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 		})
 		return
 	}
-	defer file.Close()
+	defer fMP.Close()
 
-	fileTmp, err := convertMultipartFileToFile(file)
+	passedName := cooFile.Filename
+	var isPDB = false
+	passedNameChunks := strings.Split(passedName, ".")
+	for i := range passedNameChunks {
+		if passedNameChunks[i] == "pdb" {
+			isPDB = true
+		}
+	}
+	f := io.Reader(fMP)
+	fConv, err := os.CreateTemp("", "metadata.cif")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "file_invalid",
+			"message": fmt.Sprintf("failed to create cif file to combine metadata and coordinates: %v", err.Error()),
+		})
+		return
+	}
+
+	cifFileForConverterPath := fConv.Name()
+	defer fConv.Close()
+
+	gzipped, err := IsGzipped(f)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "file_invalid",
@@ -704,14 +756,117 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 		})
 		return
 	}
-	defer file.Close()
+	if gzipped {
+		seeker, ok := f.(io.Seeker)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"status":  "file_invalid",
+				"message": "file does not support seeking",
+			})
+			return
+		}
 
-	cifText, err := parser.PDBconvertFromFile(
+		_, err := seeker.Seek(0, io.SeekStart)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"status":  "file_invalid",
+				"message": fmt.Sprintf("failed to reset file pointer: %v", err.Error()),
+			})
+			return
+		}
+
+		gzipReader, err := gzip.NewReader(f)
+		if err != nil {
+
+			c.JSON(http.StatusBadRequest, gin.H{
+				"status":  "file_invalid",
+				"message": fmt.Sprintf("failed to open gzipped cif file : %v", err.Error()),
+			})
+			return
+		}
+		defer gzipReader.Close()
+
+		_, err = io.Copy(fConv, gzipReader)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"status":  "file_invalid",
+				"message": fmt.Sprintf("failed to copy untared coordinates to temporary cif file: %v", err.Error()),
+			})
+			return
+		}
+
+		f = fConv
+	}
+	if isPDB {
+		//need to save file locally first
+		if !gzipped {
+			_, err := io.Copy(fConv, f)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"status":  "file_invalid",
+					"message": fmt.Sprintf("failed to copy coordinates to temporary cif file: %v", err.Error()),
+				})
+				return
+			}
+			fConv.Close()
+			f = fConv
+		}
+		pythonExecCh := make(chan struct {
+			errorMsg string
+			err      error
+		})
+
+		go func() {
+			cPy := exec.Command(PYTHON, "scripts/bin/pdb_extract.py", "-EM", "-iPDB", cifFileForConverterPath, "-o", cifFileForConverterPath)
+
+			var outputBuffer bytes.Buffer
+			cPy.Stdout = &outputBuffer
+			cPy.Stderr = &outputBuffer
+
+			err := cPy.Run()
+
+			if err != nil {
+				pythonExecCh <- struct {
+					errorMsg string
+					err      error
+				}{outputBuffer.String(), err}
+				return
+
+			}
+
+			pythonExecCh <- struct {
+				errorMsg string
+				err      error
+			}{outputBuffer.String(), nil}
+
+			return
+		}()
+
+		// Wait for processing to finish
+		pyExec := <-pythonExecCh
+		if pyExec.err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"status":  "file_invalid",
+				"message": fmt.Sprintf("failed to convert pdb to mmCIF: %v\nOutput: %s", pyExec.err.Error(), pyExec.errorMsg),
+			})
+			return
+		}
+		// read converted file again
+		f, err = os.Open(cifFileForConverterPath)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"status":  "pdb_invalid_2",
+				"message": fmt.Sprintf("pdb_extract conversion from pdb to cif failed to write a file: %v", err.Error()),
+			})
+		}
+	}
+
+	cifText, err := parser.PDBconvertFromReader(
 		scientificMetadata,
 		"",
 		"data/conversions.csv",
 		"data/mmcif_pdbx_v50.dic",
-		fileTmp,
+		f,
 	)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -720,8 +875,9 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 		})
 		return
 	}
+	// defer os.Remove(fileUncompressed)
 
-	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	err = parser.WriteCif(cifText, cifFileForConverterPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "writing_cif_fails",
@@ -731,9 +887,8 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 	}
 
 	c.Header("Content-Type", "application/octet-stream")
-	c.FileAttachment(fileScientificMetaPath, "metadata.cif")
-
-	defer os.Remove(fileScientificMetaPath)
+	c.FileAttachment(cifFileForConverterPath, "metadata.cif")
+	defer os.Remove(cifFileForConverterPath)
 }
 
 // Create handles the creation of a new deposition
@@ -783,7 +938,7 @@ func EmpiarMetadata(c *gin.Context) {
 		return
 	}
 	// create a temporary cif file that will be used for a deposition
-	fileScientificMeta, err := os.CreateTemp("", "metadata.cif")
+	finalCif, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "cif_creation_fails",
@@ -791,7 +946,7 @@ func EmpiarMetadata(c *gin.Context) {
 		})
 		return
 	}
-	fileScientificMetaPath := fileScientificMeta.Name()
+	finalCifPath := finalCif.Name()
 
 	// convert OSCEM-JSON to mmCIF
 	cifText, err := parser.EMDBconvert(
@@ -807,7 +962,7 @@ func EmpiarMetadata(c *gin.Context) {
 		})
 		return
 	}
-	err = parser.WriteCif(cifText, fileScientificMetaPath)
+	err = parser.WriteCif(cifText, finalCifPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "writing_cif_fails",
@@ -817,9 +972,9 @@ func EmpiarMetadata(c *gin.Context) {
 	}
 
 	c.Header("Content-Type", "application/octet-stream")
-	c.FileAttachment(fileScientificMetaPath, "metadata.cif")
+	c.FileAttachment(finalCifPath, "metadata.cif")
 
-	defer os.Remove(fileScientificMetaPath)
+	defer os.Remove(finalCifPath)
 
 }
 
@@ -867,6 +1022,7 @@ func EmpiarSchema(c *gin.Context) {
 func GetVersion(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"version": version})
 }
+
 func main() {
 	fmt.Println(ALLOW_ORIGINS, PORT)
 	router := gin.Default()
