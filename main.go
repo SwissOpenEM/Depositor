@@ -534,8 +534,8 @@ func AddCoordinates(c *gin.Context) {
 		pyExec := <-pythonExecCh
 		if pyExec.err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "file_invalid",
-				"message": fmt.Sprintf("failed to convert pdb to mmCIF: %v\nOutput: %s", pyExec.err.Error(), pyExec.errorMsg),
+				"status":  pyExec.err.Error(),
+				"message": pyExec.errorMsg,
 			})
 			return
 		}
@@ -846,8 +846,8 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 		pyExec := <-pythonExecCh
 		if pyExec.err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "file_invalid",
-				"message": fmt.Sprintf("failed to convert pdb to mmCIF: %v\nOutput: %s", pyExec.err.Error(), pyExec.errorMsg),
+				"status":  pyExec.err.Error(),
+				"message": pyExec.errorMsg,
 			})
 			return
 		}
