@@ -31,7 +31,6 @@ import (
 var version string = "DEV"
 var PORT string = getEnv("PORT", "8080")
 var ALLOW_ORIGINS string = getEnv("ALLOW_ORIGINS", "http://localhost:4201")
-var PYTHON string = getEnv("PYTHON", "python3")
 
 func getEnv(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
@@ -505,7 +504,7 @@ func AddCoordinates(c *gin.Context) {
 		})
 
 		go func() {
-			cPy := exec.Command(PYTHON, "scripts/bin/pdb_extract.py", "-EM", "-iPDB", cifFileForConverterPath, "-o", cifFileForConverterPath)
+			cPy := exec.Command("scripts/bin/pdb_extract.py", "-EM", "-iPDB", cifFileForConverterPath, "-o", cifFileForConverterPath)
 
 			var outputBuffer bytes.Buffer
 			cPy.Stdout = &outputBuffer
@@ -817,7 +816,7 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 		})
 
 		go func() {
-			cPy := exec.Command(PYTHON, "scripts/bin/pdb_extract.py", "-EM", "-iPDB", cifFileForConverterPath, "-o", cifFileForConverterPath)
+			cPy := exec.Command("scripts/bin/pdb_extract.py", "-EM", "-iPDB", cifFileForConverterPath, "-o", cifFileForConverterPath)
 
 			var outputBuffer bytes.Buffer
 			cPy.Stdout = &outputBuffer

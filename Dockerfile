@@ -17,8 +17,7 @@ COPY /data/mmcif_pdbx_v50.dic /app/data/mmcif_pdbx_v50.dic
 COPY depositions/onedep ./depositions/onedep
 COPY docs ./docs
 COPY README.md /app/README.md
-COPY /data/6z6u.pdb /app/data/6z6u.pdb
-COPY /app/data/empiar_deposition.schema.json /app/data/empiar_deposition.schema.json
+COPY /data/empiar_deposition.schema.json /app/data/empiar_deposition.schema.json
 
 ARG VERSION=v.0.1.0
 
@@ -55,7 +54,6 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /app/depositor /app/depositor
 COPY --from=builder /app/data/conversions.csv /app/data/conversions.csv
 COPY --from=builder /app/data/mmcif_pdbx_v50.dic /app/data/mmcif_pdbx_v50.dic
-COPY --from=builder /app/data/6z6u.pdb /app/data/6z6u.pdb
 COPY --from=builder /app/README.md /app/README.md
 #WILL REMOVE LATER
 COPY --from=builder /app/data/empiar_deposition.schema.json /app/data/empiar_deposition.schema.json
@@ -73,7 +71,6 @@ WORKDIR /app
 
 ENV PORT=8080
 ENV ALLOW_ORIGINS=http://localhost:4201
-ENV PYTHON=/app/scripts/extractor/bin/python
 ENV RCSBROOT=/app/scripts/packages/maxit-v11.300-prod-src
 
 EXPOSE 8080
