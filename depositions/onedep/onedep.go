@@ -54,7 +54,7 @@ func CreateDeposition(client *http.Client, userInput UserInfo, token string) (De
 			Message: err.Error(),
 		}
 	}
-	defer resp.Body.Close()
+	statusCode := resp.StatusCode
 	depositionResponse, err := decodeResponse[DepositionResponse](resp)
 	if err != nil {
 		return deposition, &ResponseType{
@@ -62,7 +62,14 @@ func CreateDeposition(client *http.Client, userInput UserInfo, token string) (De
 			Message: err.Error(),
 		}
 	}
-	if resp.StatusCode == 200 || resp.StatusCode == 201 { // even not created instance, when e.g country is set wrong this seems to return a 200 with an error.
+	err = resp.Body.Close()
+	if err != nil {
+		return deposition, &ResponseType{
+			Status:  "response_close_error",
+			Message: fmt.Sprintf("error closing response body: %v", err),
+		}
+	}
+	if statusCode == 200 || statusCode == 201 { // even not created instance, when e.g country is set wrong this seems to return a 200 with an error.
 		return depositionResponse, nil
 	} else {
 		return deposition, &ResponseType{
@@ -90,8 +97,11 @@ func (fD *DepositionFile) getMeta(file multipart.File, gzipped bool) error {
 		if err != nil {
 			return fmt.Errorf("failed to decompress: %v", err.Error())
 		}
-		defer gzReader.Close()
 		reader = gzReader
+		err = gzReader.Close()
+		if err != nil {
+			return fmt.Errorf("error closing response body: %v", err)
+		}
 	} else {
 		reader = file
 	}
@@ -104,7 +114,7 @@ func (fD *DepositionFile) getMeta(file multipart.File, gzipped bool) error {
 	if err != nil {
 		return err
 	}
-	var mode uint32 = binary.LittleEndian.Uint32(header[modeWord*wordSize : modeWord*wordSize+wordSize])
+	mode := binary.LittleEndian.Uint32(header[modeWord*wordSize : modeWord*wordSize+wordSize])
 	var cellDim [3]float32
 	if castFunc, ok := typeMap[mode]; ok {
 		for i := 0; i < 3; i++ {
@@ -219,7 +229,7 @@ func (fD *DepositionFile) UploadFile(client *http.Client, fDreq *FileDepositionR
 			Message: fmt.Sprintf("error sending request to the server: %v", err),
 		}
 	}
-	defer resp.Body.Close()
+	statusCode := resp.StatusCode
 	decodedFileResponse, err := decodeResponse[FileResponse](resp)
 	if err != nil {
 		return uploadedFile, &ResponseType{
@@ -227,7 +237,14 @@ func (fD *DepositionFile) UploadFile(client *http.Client, fDreq *FileDepositionR
 			Message: fmt.Sprintf("error decoding File ID: %v", err),
 		}
 	}
-	if resp.StatusCode == 200 || resp.StatusCode == 201 {
+	err = resp.Body.Close()
+	if err != nil {
+		return uploadedFile, &ResponseType{
+			Status:  "response_close_error",
+			Message: fmt.Sprintf("error closing response body: %v", err),
+		}
+	}
+	if statusCode == 200 || statusCode == 201 {
 		fD.Id = decodedFileResponse.Id
 		return decodedFileResponse, nil
 	} else {
@@ -279,8 +296,7 @@ func (fD *DepositionFile) AddMetadataToFile(client *http.Client, token string) (
 			Message: fmt.Sprintf("error sending request to  to url %v: %v", urlFileMeta, err),
 		}
 	}
-	defer resp.Body.Close()
-
+	statusCode := resp.StatusCode
 	decodedFileResponse, err := decodeResponse[FileResponse](resp)
 	if err != nil {
 		return uploadedFile, &ResponseType{
@@ -288,7 +304,14 @@ func (fD *DepositionFile) AddMetadataToFile(client *http.Client, token string) (
 			Message: fmt.Sprintf("error decoding File ID: %v", err),
 		}
 	}
-	if resp.StatusCode == 200 || resp.StatusCode == 201 {
+	err = resp.Body.Close()
+	if err != nil {
+		return uploadedFile, &ResponseType{
+			Status:  "response_close_error",
+			Message: fmt.Sprintf("error closing response body: %v", err),
+		}
+	}
+	if statusCode == 200 || statusCode == 201 {
 		return decodedFileResponse, nil
 	} else {
 		return uploadedFile, &ResponseType{
@@ -296,6 +319,7 @@ func (fD *DepositionFile) AddMetadataToFile(client *http.Client, token string) (
 			Message: "some problem ", //decodedFileResponse.Errors,
 		}
 	}
+
 }
 
 // sends a request to OneDep to process a  deposition
@@ -311,9 +335,12 @@ func ProcessDeposition(client *http.Client, deposition string, token string) (st
 	if err != nil {
 		return "", fmt.Errorf("errored when sending request to the server: %v", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 || resp.StatusCode == 201 {
+	statusCode := resp.StatusCode
+	err = resp.Body.Close()
+	if err != nil {
+		return "", fmt.Errorf("error closing response body: %v", err)
+	}
+	if statusCode == 200 || statusCode == 201 {
 		return "success", nil
 	} else {
 		body, err := io.ReadAll(resp.Body)

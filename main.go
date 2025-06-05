@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -37,27 +37,6 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
-}
-
-// Convert multipart.File to *os.File by saving it to a temporary file
-func convertMultipartFileToFile(file multipart.File) (*os.File, error) {
-	tempFile, err := os.CreateTemp("", "uploaded-*")
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	// Copy the contents of the multipart.File to the temporary file
-	if _, err := io.Copy(tempFile, file); err != nil {
-		tempFile.Close()
-		return nil, err
-	}
-
-	// Close and reopen the file to reset the read pointer for future operations
-	if err := tempFile.Close(); err != nil {
-		return nil, err
-	}
-	return os.Open(tempFile.Name())
 }
 
 func IsValidJSON(str string) bool {
@@ -197,7 +176,6 @@ func AddFile(c *gin.Context) {
 		})
 		return
 	}
-	defer file.Close()
 
 	client := &http.Client{}
 
@@ -218,6 +196,10 @@ func AddFile(c *gin.Context) {
 	if errResp != nil {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
+	}
+	err = file.Close()
+	if err != nil {
+		log.Println("There was an issue closing a file after reading it")
 	}
 	uploadedFileDecoded, errResp := fD.UploadFile(client, fDReq, bearer)
 	if errResp != nil {
@@ -331,7 +313,6 @@ func AddMetadata(c *gin.Context) {
 			Message: err.Error(),
 		})
 	}
-	defer cifFile.Close()
 
 	fD := onedep.NewDepositionFile(depID, metadataFile)
 
@@ -346,12 +327,19 @@ func AddMetadata(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
+	err = cifFile.Close()
+	if err != nil {
+		log.Println("There was an issue closing a file after reading it")
+	}
 	uploadedFile, errResp := fD.UploadFile(client, fDReq, bearer)
 	if errResp != nil {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
-	defer os.Remove(finalCifPath)
+	err = os.Remove(finalCifPath)
+	if err != nil {
+		log.Println("There was an issue removing an intermediate file after")
+	}
 
 	c.JSON(http.StatusOK, uploadedFile)
 }
@@ -412,7 +400,6 @@ func AddCoordinates(c *gin.Context) {
 		})
 		return
 	}
-	defer fMP.Close()
 
 	passedName := cooFile.Filename
 	var isPDB = false
@@ -423,6 +410,10 @@ func AddCoordinates(c *gin.Context) {
 		}
 	}
 	f := io.Reader(fMP)
+	err = fMP.Close()
+	if err != nil {
+		log.Println("There was an issue closing a file after reading it")
+	}
 	fConv, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -433,7 +424,6 @@ func AddCoordinates(c *gin.Context) {
 	}
 
 	cifFileForConverterPath := fConv.Name()
-	defer fConv.Close()
 
 	gzipped, err := IsGzipped(f)
 	if err != nil {
@@ -471,7 +461,6 @@ func AddCoordinates(c *gin.Context) {
 			})
 			return
 		}
-		defer gzipReader.Close()
 
 		_, err = io.Copy(fConv, gzipReader)
 		if err != nil {
@@ -480,6 +469,11 @@ func AddCoordinates(c *gin.Context) {
 				"message": fmt.Sprintf("failed to copy untared coordinates to temporary cif file: %v", err.Error()),
 			})
 			return
+		}
+		err = gzipReader.Close()
+		if err != nil {
+
+			log.Println("There was an issue closing a file after reading it")
 		}
 
 		f = fConv
@@ -495,8 +489,6 @@ func AddCoordinates(c *gin.Context) {
 				})
 				return
 			}
-			fConv.Close()
-			f = fConv
 		}
 		pythonExecCh := make(chan struct {
 			errorMsg string
@@ -525,8 +517,6 @@ func AddCoordinates(c *gin.Context) {
 				errorMsg string
 				err      error
 			}{outputBuffer.String(), nil}
-
-			return
 		}()
 
 		// Wait for processing to finish
@@ -546,6 +536,13 @@ func AddCoordinates(c *gin.Context) {
 				"message": fmt.Sprintf("pdb_extract conversion from pdb to cif failed to write a file: %v", err.Error()),
 			})
 		}
+	}
+	err = fConv.Close()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "file_invalid",
+			"message": fmt.Sprintf("couldn't close file used for writing %v", err.Error()),
+		})
 	}
 	cifText, err := parser.PDBconvertFromReader(
 		scientificMetadata,
@@ -584,7 +581,6 @@ func AddCoordinates(c *gin.Context) {
 			Message: err.Error(),
 		})
 	}
-	defer cifFile.Close()
 
 	fD := onedep.NewDepositionFile(depID, mockFileUpload)
 	fDReq, errResp := fD.PrepareDeposition()
@@ -596,6 +592,10 @@ func AddCoordinates(c *gin.Context) {
 	if errResp != nil {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
+	}
+	err = cifFile.Close()
+	if err != nil {
+		log.Println("There was an issue closing a file after reading it")
 	}
 	uploadedFile, errResp := fD.UploadFile(client, fDReq, bearer)
 	if errResp != nil {
@@ -667,7 +667,10 @@ func DownloadMetadata(c *gin.Context) {
 	c.Header("Content-Type", "application/octet-stream")
 	c.FileAttachment(finalCifPath, "metadata.cif")
 
-	defer os.Remove(finalCifPath)
+	err = os.Remove(finalCifPath)
+	if err != nil {
+		log.Println("There was an issue removing a temporary file")
+	}
 
 }
 
@@ -724,7 +727,6 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 		})
 		return
 	}
-	defer fMP.Close()
 
 	passedName := cooFile.Filename
 	var isPDB = false
@@ -743,9 +745,11 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 		})
 		return
 	}
-
+	err = fMP.Close()
+	if err != nil {
+		log.Println("There was an issue closing a file after reading it")
+	}
 	cifFileForConverterPath := fConv.Name()
-	defer fConv.Close()
 
 	gzipped, err := IsGzipped(f)
 	if err != nil {
@@ -783,7 +787,6 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 			})
 			return
 		}
-		defer gzipReader.Close()
 
 		_, err = io.Copy(fConv, gzipReader)
 		if err != nil {
@@ -793,8 +796,11 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 			})
 			return
 		}
+		err = gzipReader.Close()
+		if err != nil {
 
-		f = fConv
+			log.Println("There was an issue closing a file after reading it")
+		}
 	}
 	if isPDB {
 		//need to save file locally first
@@ -807,8 +813,6 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 				})
 				return
 			}
-			fConv.Close()
-			f = fConv
 		}
 		pythonExecCh := make(chan struct {
 			errorMsg string
@@ -838,9 +842,12 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 				err      error
 			}{outputBuffer.String(), nil}
 
-			return
 		}()
+		err = fConv.Close()
+		if err != nil {
 
+			log.Println("There was an issue closing a file after reading it")
+		}
 		// Wait for processing to finish
 		pyExec := <-pythonExecCh
 		if pyExec.err != nil {
@@ -887,7 +894,10 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 
 	c.Header("Content-Type", "application/octet-stream")
 	c.FileAttachment(cifFileForConverterPath, "metadata.cif")
-	defer os.Remove(cifFileForConverterPath)
+	err = os.Remove(cifFileForConverterPath)
+	if err != nil {
+		log.Println("There was an issue removing a temporary file")
+	}
 }
 
 // Create handles the creation of a new deposition
@@ -973,7 +983,10 @@ func EmpiarMetadata(c *gin.Context) {
 	c.Header("Content-Type", "application/octet-stream")
 	c.FileAttachment(finalCifPath, "metadata.cif")
 
-	defer os.Remove(finalCifPath)
+	err = os.Remove(finalCifPath)
+	if err != nil {
+		log.Println("There was an issue closing a file after reading it")
+	}
 
 }
 
@@ -1006,7 +1019,6 @@ func EmpiarSchema(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"schema": b64.StdEncoding.EncodeToString(schema),
 	})
-	return
 }
 
 //	returns the current version of the depositor
