@@ -15,6 +15,87 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/empiar/metadata": {
+            "post": {
+                "description": "NA",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "empiar"
+                ],
+                "summary": "creates a json file with metadata for deposition to EMPIAR",
+                "parameters": [
+                    {
+                        "description": "Scientific metadata as a JSON string; expects elements from OSCEM on the top level",
+                        "name": "scientificMetadata",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "json file with metadata",
+                        "schema": {
+                            "$ref": "#/definitions/empiar.Imageset"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    }
+                }
+            }
+        },
+        "/empiar/schema": {
+            "get": {
+                "description": "NA",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "empiar"
+                ],
+                "summary": "creates a json file with metadata for deposition to EMPIAR",
+                "responses": {
+                    "200": {
+                        "description": "base64 encoded schema",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/onedep.ResponseType"
+                        }
+                    }
+                }
+            }
+        },
         "/onedep": {
             "post": {
                 "description": "Create a new deposition by uploading experiment and user details to OneDep API.",
@@ -25,7 +106,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "deposition"
+                    "onedep"
                 ],
                 "summary": "Create a new deposition to OneDep",
                 "parameters": [
@@ -71,7 +152,7 @@ const docTemplate = `{
                     "application/octet-stream"
                 ],
                 "tags": [
-                    "deposition"
+                    "onedep"
                 ],
                 "summary": "Get a cif file with metadata for manual deposition in OneDep",
                 "parameters": [
@@ -117,7 +198,7 @@ const docTemplate = `{
                     "application/octet-stream"
                 ],
                 "tags": [
-                    "deposition"
+                    "onedep"
                 ],
                 "summary": "Get a cif file with metadata and coordinates for manual deposition in OneDep",
                 "parameters": [
@@ -168,7 +249,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "deposition"
+                    "onedep"
                 ],
                 "summary": "Add file, pixel spacing, contour level and description to deposition in OneDep",
                 "parameters": [
@@ -237,7 +318,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "deposition"
+                    "onedep"
                 ],
                 "summary": "Add a cif file with metadata to deposition in OneDep",
                 "parameters": [
@@ -295,7 +376,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "deposition"
+                    "onedep"
                 ],
                 "summary": "Add coordinates and description to deposition in OneDep",
                 "parameters": [
@@ -360,7 +441,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "deposition"
+                    "onedep"
                 ],
                 "summary": "Process deposition to OneDep",
                 "parameters": [
@@ -417,12 +498,71 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "400": {
+                        "description": "Error response",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
         }
     },
     "definitions": {
+        "empiar.Imageset": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "data_format": {
+                    "type": "string"
+                },
+                "details": {
+                    "type": "string"
+                },
+                "directory": {
+                    "type": "string"
+                },
+                "frames_per_image": {
+                    "type": "integer"
+                },
+                "header_format": {
+                    "type": "string"
+                },
+                "image_height": {
+                    "type": "integer"
+                },
+                "image_width": {
+                    "type": "integer"
+                },
+                "micrographs_file_pattern": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "num_images_or_tilt_series": {
+                    "type": "integer"
+                },
+                "picked_particles_directory": {
+                    "type": "string"
+                },
+                "picked_particles_file_pattern": {
+                    "type": "string"
+                },
+                "pixel_height": {
+                    "type": "number"
+                },
+                "pixel_width": {
+                    "type": "number"
+                },
+                "voxel_type": {
+                    "type": "string"
+                }
+            }
+        },
         "onedep.CreatedDeposition": {
             "type": "object",
             "properties": {
@@ -452,7 +592,9 @@ const docTemplate = `{
                 "errors": {
                     "$ref": "#/definitions/onedep.OneDepError"
                 },
-                "experiments": {},
+                "experiments": {
+                    "description": "FIX ME actual response type does not correspond to the documented."
+                },
                 "hold_exp_date": {
                     "type": "string"
                 },
@@ -489,23 +631,25 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "errors": {
-                    "type": "string"
+                    "description": "FIX ME actual response type does not correspond to the documented."
                 },
                 "id": {
                     "type": "integer"
                 },
                 "metadata": {
+                    "description": "not there",
                     "type": "object",
                     "additionalProperties": {}
                 },
                 "name": {
+                    "description": "not there",
                     "type": "string"
                 },
                 "type": {
                     "$ref": "#/definitions/onedep.OneDepType"
                 },
                 "warnings": {
-                    "type": "string"
+                    "description": "FIX ME actual response type does not correspond to the documented."
                 }
             }
         },

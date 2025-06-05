@@ -1,4 +1,39 @@
 definitions:
+  empiar.Imageset:
+    properties:
+      category:
+        type: string
+      data_format:
+        type: string
+      details:
+        type: string
+      directory:
+        type: string
+      frames_per_image:
+        type: integer
+      header_format:
+        type: string
+      image_height:
+        type: integer
+      image_width:
+        type: integer
+      micrographs_file_pattern:
+        type: string
+      name:
+        type: string
+      num_images_or_tilt_series:
+        type: integer
+      picked_particles_directory:
+        type: string
+      picked_particles_file_pattern:
+        type: string
+      pixel_height:
+        type: number
+      pixel_width:
+        type: number
+      voxel_type:
+        type: string
+    type: object
   onedep.CreatedDeposition:
     properties:
       depID:
@@ -18,7 +53,8 @@ definitions:
         type: string
       errors:
         $ref: '#/definitions/onedep.OneDepError'
-      experiments: {}
+      experiments:
+        description: FIX ME actual response type does not correspond to the documented.
       hold_exp_date:
         type: string
       id:
@@ -43,18 +79,20 @@ definitions:
       created:
         type: string
       errors:
-        type: string
+        description: FIX ME actual response type does not correspond to the documented.
       id:
         type: integer
       metadata:
         additionalProperties: {}
+        description: not there
         type: object
       name:
+        description: not there
         type: string
       type:
         $ref: '#/definitions/onedep.OneDepType'
       warnings:
-        type: string
+        description: FIX ME actual response type does not correspond to the documented.
     type: object
   onedep.OneDepError:
     properties:
@@ -207,6 +245,60 @@ info:
   title: OpenEm Depositor API
   version: api/v1
 paths:
+  /empiar/metadata:
+    post:
+      consumes:
+      - application/json
+      description: NA
+      parameters:
+      - description: Scientific metadata as a JSON string; expects elements from OSCEM
+          on the top level
+        in: body
+        name: scientificMetadata
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: json file with metadata
+          schema:
+            $ref: '#/definitions/empiar.Imageset'
+        "400":
+          description: Error response
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+      summary: creates a json file with metadata for deposition to EMPIAR
+      tags:
+      - empiar
+  /empiar/schema:
+    get:
+      consumes:
+      - application/json
+      description: NA
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: base64 encoded schema
+          schema:
+            type: string
+        "400":
+          description: Error response
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/onedep.ResponseType'
+      summary: creates a json file with metadata for deposition to EMPIAR
+      tags:
+      - empiar
   /onedep:
     post:
       consumes:
@@ -237,7 +329,7 @@ paths:
             $ref: '#/definitions/onedep.ResponseType'
       summary: Create a new deposition to OneDep
       tags:
-      - deposition
+      - onedep
   /onedep/{depID}/file:
     post:
       consumes:
@@ -285,7 +377,7 @@ paths:
       summary: Add file, pixel spacing, contour level and description to deposition
         in OneDep
       tags:
-      - deposition
+      - onedep
   /onedep/{depID}/metadata:
     post:
       consumes:
@@ -326,7 +418,7 @@ paths:
             $ref: '#/definitions/onedep.ResponseType'
       summary: Add a cif file with metadata to deposition in OneDep
       tags:
-      - deposition
+      - onedep
   /onedep/{depID}/pdb:
     post:
       consumes:
@@ -371,7 +463,7 @@ paths:
             $ref: '#/definitions/onedep.ResponseType'
       summary: Add coordinates and description to deposition in OneDep
       tags:
-      - deposition
+      - onedep
   /onedep/{depID}/process:
     post:
       consumes:
@@ -405,7 +497,7 @@ paths:
             $ref: '#/definitions/onedep.ResponseType'
       summary: Process deposition to OneDep
       tags:
-      - deposition
+      - onedep
   /onedep/metadata:
     post:
       consumes:
@@ -436,7 +528,7 @@ paths:
             $ref: '#/definitions/onedep.ResponseType'
       summary: Get a cif file with metadata for manual deposition in OneDep
       tags:
-      - deposition
+      - onedep
   /onedep/pdb:
     post:
       consumes:
@@ -472,7 +564,7 @@ paths:
       summary: Get a cif file with metadata and coordinates for manual deposition
         in OneDep
       tags:
-      - deposition
+      - onedep
   /version:
     get:
       description: Create a new deposition by uploading experiments, files, and metadata
@@ -482,6 +574,10 @@ paths:
       responses:
         "200":
           description: Depositior version
+          schema:
+            type: string
+        "400":
+          description: Error response
           schema:
             type: string
       summary: Return current version
