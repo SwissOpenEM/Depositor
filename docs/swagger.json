@@ -668,6 +668,7 @@
             "enum": [
                 "add-map",
                 "co-cif",
+                "md-cif",
                 "co-pdb",
                 "fsc-xml",
                 "half-map",
@@ -702,6 +703,7 @@
             "x-enum-varnames": [
                 "ADD_MAP",
                 "CO_CIF",
+                "MD_CIF",
                 "CO_PDB",
                 "FSC_XML",
                 "HALF_MAP",
@@ -744,6 +746,9 @@
                 "orcidIds"
             ],
             "properties": {
+                "coordinates": {
+                    "type": "boolean"
+                },
                 "country": {
                     "type": "string"
                 },

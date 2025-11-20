@@ -676,6 +676,7 @@ const docTemplate = `{
             "enum": [
                 "add-map",
                 "co-cif",
+                "md-cif",
                 "co-pdb",
                 "fsc-xml",
                 "half-map",
@@ -710,6 +711,7 @@ const docTemplate = `{
             "x-enum-varnames": [
                 "ADD_MAP",
                 "CO_CIF",
+                "MD_CIF",
                 "CO_PDB",
                 "FSC_XML",
                 "HALF_MAP",
@@ -752,6 +754,9 @@ const docTemplate = `{
                 "orcidIds"
             ],
             "properties": {
+                "coordinates": {
+                    "type": "boolean"
+                },
                 "country": {
                     "type": "string"
                 },

@@ -81,7 +81,13 @@ func CreateDeposition(client *http.Client, userInput UserInfo, token string) (De
 
 // creates a new instance of DepositionFile
 func NewDepositionFile(depositionID string, fileUpload FileUpload) *DepositionFile {
-	fD := DepositionFile{depositionID, 0, fileUpload.Name, fileUpload.Type, [3]float32{}, fileUpload.Contour, fileUpload.Details}
+	fD := DepositionFile{depositionID,
+		0,
+		fileUpload.Name,
+		string(fileUpload.Type),
+		[3]float32{},
+		fileUpload.Contour,
+		fileUpload.Details}
 	return &fD
 }
 
@@ -335,19 +341,18 @@ func ProcessDeposition(client *http.Client, deposition string, token string) (st
 	if err != nil {
 		return "", fmt.Errorf("errored when sending request to the server: %v", err)
 	}
+	defer resp.Body.Close()
+
 	statusCode := resp.StatusCode
-	err = resp.Body.Close()
-	if err != nil {
-		return "", fmt.Errorf("error closing response body: %v", err)
-	}
 	if statusCode == 200 || statusCode == 201 {
 		return "success", nil
-	} else {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("create: failed to create new deposition: status code %v, status %s, unreadable body", resp.StatusCode, resp.Status)
-		}
-		return "", fmt.Errorf("create: failed to create new deposition: status code %v, status %s, body %s", resp.StatusCode, resp.Status, string(body))
 	}
+
+	// Read error response body before it's closed
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("process: failed to process deposition: status code %v, status %s, unreadable body", resp.StatusCode, resp.Status)
+	}
+	return "", fmt.Errorf("process: failed to process deposition: status code %v, status %s, body %s", resp.StatusCode, resp.Status, string(body))
 
 }

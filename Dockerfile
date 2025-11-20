@@ -12,7 +12,11 @@ RUN go mod download
 
 # Copy the source code
 COPY main.go ./
-COPY /data/conversions.csv /app/data/conversions.csv
+
+# Download conversions.csv from OSCEM GitHub repository
+RUN mkdir -p /app/data && \
+    curl -L https://raw.githubusercontent.com/osc-em/Converter/main/csv/pdb_conversions.csv -o /app/data/conversions.csv
+
 COPY /data/mmcif_pdbx_v50.dic /app/data/mmcif_pdbx_v50.dic
 COPY depositions/onedep ./depositions/onedep
 COPY docs ./docs
@@ -70,7 +74,7 @@ RUN pip install --upgrade pip && \
 WORKDIR /app
 
 ENV PORT=8080
-ENV ALLOW_ORIGINS=http://localhost:4201
+ENV ALLOW_ORIGINS=http://localhost:4200
 ENV RCSBROOT=/app/scripts/packages/maxit-v11.300-prod-src
 
 EXPOSE 8080

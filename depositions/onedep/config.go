@@ -18,12 +18,13 @@ const (
 )
 
 type RequestCreate struct {
-	Email    string   `json:"email" binding:"required,email"`
-	OrcidIds []string `json:"orcidIds" binding:"required"`
-	Password string   `json:"password" binding:"-"`
-	Country  string   `json:"country" binding:"required"`
-	Method   string   `json:"method" binding:"required"`
-	JWTToken string   `json:"jwtToken" binding:"required"`
+	Email       string   `json:"email" binding:"required,email"`
+	OrcidIds    []string `json:"orcidIds" binding:"required"`
+	Password    string   `json:"password"`
+	Country     string   `json:"country" binding:"required"`
+	Method      string   `json:"method" binding:"required"`
+	JWTToken    string   `json:"jwtToken" binding:"required"`
+	Coordinates bool     `json:"coordinates"`
 }
 
 type FileMetadata struct {
@@ -44,8 +45,11 @@ type UploadedFile struct {
 	FileID string `json:"FileID"`
 }
 type EmMethod struct {
-	Type    string `json:"type"`
-	Subtype string `json:"subtype,omitempty"`
+	Type        string `json:"type"`
+	Subtype     string `json:"subtype,omitempty"`
+	Coordinates bool   `json:"coordinates"`
+	SfOnly      bool   `json:"sf_only"`
+	RelatedEmdb string `json:"related_emdb,omitempty"`
 }
 type EmMethodExtended struct {
 	Type        string `json:"type"`
@@ -71,10 +75,10 @@ type UserInfo struct {
 }
 
 type FileUpload struct {
-	Name    string  `json:"name"`
-	Type    string  `json:"type"`
-	Contour float32 `json:"contour"`
-	Details string  `json:"details"`
+	Name    string     `json:"name"`
+	Type    OneDepType `json:"type"`
+	Contour float32    `json:"contour"`
+	Details string     `json:"details"`
 }
 
 type DepositionFile struct {
@@ -126,6 +130,7 @@ type OneDepType string
 const (
 	ADD_MAP     OneDepType = "add-map"
 	CO_CIF      OneDepType = "co-cif"
+	MD_CIF      OneDepType = "md-cif"
 	CO_PDB      OneDepType = "co-pdb"
 	FSC_XML     OneDepType = "fsc-xml"
 	HALF_MAP    OneDepType = "half-map"

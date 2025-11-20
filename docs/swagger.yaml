@@ -110,6 +110,7 @@ definitions:
     enum:
     - add-map
     - co-cif
+    - md-cif
     - co-pdb
     - fsc-xml
     - half-map
@@ -144,6 +145,7 @@ definitions:
     x-enum-varnames:
     - ADD_MAP
     - CO_CIF
+    - MD_CIF
     - CO_PDB
     - FSC_XML
     - HALF_MAP
@@ -176,6 +178,8 @@ definitions:
     - XS_MTZ
   onedep.RequestCreate:
     properties:
+      coordinates:
+        type: boolean
       country:
         type: string
       email:

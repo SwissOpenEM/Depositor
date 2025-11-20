@@ -30,13 +30,40 @@ import (
 
 var version string = "DEV"
 var PORT string = getEnv("PORT", "8080")
-var ALLOW_ORIGINS string = getEnv("ALLOW_ORIGINS", "http://localhost:4201")
+var ALLOW_ORIGINS string = getEnv("ALLOW_ORIGINS", "http://localhost:4200")
 
 func getEnv(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
 	}
 	return defaultValue
+}
+
+// deferClose schedules a file closer to be called, logging any errors
+func deferClose(closer io.Closer, resourceName string) {
+	if err := closer.Close(); err != nil {
+		log.Printf("Warning: failed to close %s: %v", resourceName, err)
+	}
+}
+
+// deferRemove schedules a file removal, logging any errors
+func deferRemove(path string) {
+	if err := os.Remove(path); err != nil {
+		log.Printf("Warning: failed to remove temporary file %s: %v", path, err)
+	}
+}
+
+// respondWithError sends a consistent error response to the client
+func respondWithError(c *gin.Context, statusCode int, status, message string) {
+	c.JSON(statusCode, onedep.ResponseType{
+		Status:  status,
+		Message: message,
+	})
+}
+
+// respondBadRequest sends a 400 Bad Request with consistent formatting
+func respondBadRequest(c *gin.Context, status, message string) {
+	respondWithError(c, http.StatusBadRequest, status, message)
 }
 
 func IsValidJSON(str string) bool {
@@ -58,6 +85,39 @@ func IsGzipped(reader io.Reader) (bool, error) {
 	}
 }
 
+// decompressGzipToFile decompresses a gzipped reader into the provided output file
+// Returns an error if the input is not seekable, or if decompression fails
+func decompressGzipToFile(input io.Reader, output *os.File) error {
+	// Reset file pointer to beginning
+	seeker, ok := input.(io.Seeker)
+	if !ok {
+		return fmt.Errorf("file does not support seeking")
+	}
+
+	if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("failed to reset file pointer: %w", err)
+	}
+
+	// Create gzip reader
+	gzipReader, err := gzip.NewReader(input)
+	if err != nil {
+		return fmt.Errorf("failed to open gzipped file: %w", err)
+	}
+	defer deferClose(gzipReader, "gzip reader")
+
+	// Copy decompressed content to output file
+	if _, err := io.Copy(output, gzipReader); err != nil {
+		return fmt.Errorf("failed to copy decompressed content: %w", err)
+	}
+
+	return nil
+}
+
+// isPDBFile checks if a filename represents a PDB file (handles both .pdb and .pdb.gz)
+func isPDBFile(filename string) bool {
+	return strings.HasSuffix(filename, ".pdb") || strings.HasSuffix(filename, ".pdb.gz")
+}
+
 // Create handles the creation of a new deposition
 // @Summary Create a new deposition to OneDep
 // @Description Create a new deposition by uploading experiment and user details to OneDep API.
@@ -75,24 +135,16 @@ func Create(c *gin.Context) {
 
 	// Bind JSON payload to the struct
 	if err := c.ShouldBindJSON(&body); err != nil {
-
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "invalid_request_body",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "invalid_request_body", err.Error())
 		return
 	}
-
 	email := body.Email
 	var experiments []onedep.EmMethod
 	if exp, ok := onedep.EmMethods[body.Method]; ok {
 		experiments = []onedep.EmMethod{exp}
+		experiments[0].Coordinates = body.Coordinates
 	} else {
-
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "method_unknown",
-			"message": fmt.Sprintf("unknown EM method %v", body.Method),
-		})
+		respondBadRequest(c, "method_unknown", fmt.Sprintf("unknown EM method %v", body.Method))
 		return
 	}
 	bearer := body.JWTToken
@@ -108,15 +160,10 @@ func Create(c *gin.Context) {
 
 	deposition, resp := onedep.CreateDeposition(client, depData, bearer)
 	if resp != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  resp.Status,
-			"message": resp.Message,
-		})
-		return
-	} else {
-		c.JSON(http.StatusCreated, deposition)
+		respondBadRequest(c, resp.Status, resp.Message)
 		return
 	}
+	c.JSON(http.StatusCreated, deposition)
 
 }
 
@@ -137,10 +184,7 @@ func Create(c *gin.Context) {
 func AddFile(c *gin.Context) {
 	err := c.Request.ParseMultipartForm(10 << 20)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "form_invalid",
-			"message": "Failed to parse Form data.",
-		})
+		respondBadRequest(c, "form_invalid", "Failed to parse Form data.")
 		return
 	}
 	depID := c.Param("depID")
@@ -149,20 +193,14 @@ func AddFile(c *gin.Context) {
 	metadataFilesStr := c.PostForm("fileMetadata")     //files Metadata
 
 	if metadataFilesStr == "{}" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "form_invalid",
-			"message": "Missing metadata for files information.",
-		})
+		respondBadRequest(c, "form_invalid", "Missing metadata for files information.")
 		return
 	}
 
 	var fileMetadata onedep.FileUpload
 	err = json.Unmarshal([]byte(metadataFilesStr), &fileMetadata)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "JSON_invalid",
-			"message": fmt.Sprintf("error decoding JSON: %v", err.Error()),
-		})
+		respondBadRequest(c, "JSON_invalid", fmt.Sprintf("error decoding JSON: %v", err.Error()))
 		return
 	}
 	fileName := strings.Split(cooFile.Filename, ".")
@@ -170,10 +208,7 @@ func AddFile(c *gin.Context) {
 
 	file, err := cooFile.Open()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "file_header_invalid",
-			"message": fmt.Sprintf("failed to open file header: %v", err.Error()),
-		})
+		respondBadRequest(c, "file_header_invalid", fmt.Sprintf("failed to open file header: %v", err.Error()))
 		return
 	}
 
@@ -197,10 +232,7 @@ func AddFile(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
-	err = file.Close()
-	if err != nil {
-		log.Println("There was an issue closing a file after reading it")
-	}
+	defer deferClose(file, "uploaded file")
 	uploadedFileDecoded, errResp := fD.UploadFile(client, fDReq, bearer)
 	if errResp != nil {
 		c.JSON(http.StatusBadRequest, errResp)
@@ -208,7 +240,7 @@ func AddFile(c *gin.Context) {
 	}
 
 	for j := range onedep.NeedMeta {
-		if fileMetadata.Type == onedep.NeedMeta[j] {
+		if string(fileMetadata.Type) == onedep.NeedMeta[j] {
 			uploadedFileDecoded, errResp = fD.AddMetadataToFile(client, bearer)
 			if errResp != nil {
 				c.JSON(http.StatusBadRequest, errResp)
@@ -235,13 +267,9 @@ func AddFile(c *gin.Context) {
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
 // @Router /onedep/{depID}/metadata [post]
 func AddMetadata(c *gin.Context) {
-
 	err := c.Request.ParseMultipartForm(10 << 20)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "body_invalid",
-			"message": "Failed to parse Form data.",
-		})
+		respondBadRequest(c, "body_invalid", "Failed to parse Form data.")
 		return
 	}
 
@@ -252,32 +280,24 @@ func AddMetadata(c *gin.Context) {
 	// Extract entries from multipart form
 	metadataStr := c.PostForm("scientificMetadata")
 	if metadataStr == "{}" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "body_invalid",
-			"message": "Missing scientific metadata.",
-		})
+		respondBadRequest(c, "body_invalid", "Missing scientific metadata.")
 		return
 	}
 	// Parse  JSON string into the Metadata
 	var scientificMetadata map[string]any
 	err = json.Unmarshal([]byte(metadataStr), &scientificMetadata)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "body_invalid",
-			"message": "Failed to parse scientific metadata to JSON.",
-		})
+		respondBadRequest(c, "body_invalid", "Failed to parse scientific metadata to JSON.")
 		return
 	}
 	// create a temporary cif file that will be used for a deposition
 	finalCif, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "cif_creation_fails",
-			"message": "Failed to create a file to write cif file with metadata.",
-		})
+		respondBadRequest(c, "cif_creation_fails", "Failed to create a file to write cif file with metadata.")
 		return
 	}
 	finalCifPath := finalCif.Name()
+	defer deferRemove(finalCifPath)
 
 	// convert OSCEM-JSON to mmCIF
 	cifText, err := parser.EMDBconvert(
@@ -287,32 +307,26 @@ func AddMetadata(c *gin.Context) {
 		"data/mmcif_pdbx_v50.dic",
 	)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "conversion_to_cif_fails",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "conversion_to_cif_fails", err.Error())
 		return
 	}
 	err = parser.WriteCif(cifText, finalCifPath)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "writing_cif_fails",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "writing_cif_fails", err.Error())
 		return
 	}
 	client := &http.Client{}
 	metadataFile := onedep.FileUpload{
 		Name: "metadata.cif",
-		Type: "co-cif", // FIX ME add appropriate type once it's implemented in OneDep API
+		Type: onedep.MD_CIF,
 	}
+	fmt.Println("will transfer md cif!")
 	cifFile, err := os.Open(finalCifPath)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, &onedep.ResponseType{
-			Status:  "cif_file_issue",
-			Message: err.Error(),
-		})
+		respondBadRequest(c, "cif_file_issue", err.Error())
+		return
 	}
+	defer deferClose(cifFile, "metadata cif file")
 
 	fD := onedep.NewDepositionFile(depID, metadataFile)
 
@@ -327,18 +341,11 @@ func AddMetadata(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
-	err = cifFile.Close()
-	if err != nil {
-		log.Println("There was an issue closing a file after reading it")
-	}
+
 	uploadedFile, errResp := fD.UploadFile(client, fDReq, bearer)
 	if errResp != nil {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
-	}
-	err = os.Remove(finalCifPath)
-	if err != nil {
-		log.Println("There was an issue removing an intermediate file after")
 	}
 
 	c.JSON(http.StatusOK, uploadedFile)
@@ -361,10 +368,7 @@ func AddMetadata(c *gin.Context) {
 func AddCoordinates(c *gin.Context) {
 	err := c.Request.ParseMultipartForm(10 << 20)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "body_invalid",
-			"message": "Failed to parse Form data.",
-		})
+		respondBadRequest(c, "body_invalid", "Failed to parse Form data.")
 		return
 	}
 
@@ -375,107 +379,47 @@ func AddCoordinates(c *gin.Context) {
 	// parse extracted metadata from SciCat
 	metadataStr := c.PostForm("scientificMetadata")
 	if metadataStr == "{}" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "body_invalid",
-			"message": "Missing scientific metadata.",
-		})
+		respondBadRequest(c, "body_invalid", "Missing scientific metadata.")
 		return
 	}
 	// Parse  JSON string into the OSCEM format
 	var scientificMetadata map[string]any
 	err = json.Unmarshal([]byte(metadataStr), &scientificMetadata)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "body_invalid",
-			"message": "Failed to parse scientific metadata to JSON.",
-		})
+		respondBadRequest(c, "body_invalid", "Failed to parse scientific metadata to JSON.")
 		return
 	}
 	// open the multipart file header
 	fMP, err := cooFile.Open()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "file_invalid",
-			"message": fmt.Sprintf("Failed to open file header: %v", err.Error()),
-		})
+		respondBadRequest(c, "file_invalid", fmt.Sprintf("Failed to open file header: %v", err.Error()))
 		return
 	}
 
 	passedName := cooFile.Filename
-	var isPDB = false
-	passedNameChunks := strings.Split(passedName, ".")
-	for i := range passedNameChunks {
-		if passedNameChunks[i] == "pdb" {
-			isPDB = true
-		}
-	}
+	isPDB := isPDBFile(passedName)
 	f := io.Reader(fMP)
-	err = fMP.Close()
-	if err != nil {
-		log.Println("There was an issue closing a file after reading it")
-	}
+	defer deferClose(fMP, "multipart file")
+
 	fConv, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "file_invalid",
-			"message": fmt.Sprintf("failed to create cif file to combine metadata and coordinates: %v", err.Error()),
-		})
+		respondBadRequest(c, "file_invalid", fmt.Sprintf("failed to create cif file to combine metadata and coordinates: %v", err.Error()))
 		return
 	}
 
 	cifFileForConverterPath := fConv.Name()
+	defer deferRemove(cifFileForConverterPath)
 
 	gzipped, err := IsGzipped(f)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "file_invalid",
-			"message": fmt.Sprintf("failed to open cif file to read coordinates: %v", err.Error()),
-		})
+		respondBadRequest(c, "file_invalid", fmt.Sprintf("failed to open cif file to read coordinates: %v", err.Error()))
 		return
 	}
 	if gzipped {
-		seeker, ok := f.(io.Seeker)
-		if !ok {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "file_invalid",
-				"message": "file does not support seeking",
-			})
+		if err := decompressGzipToFile(f, fConv); err != nil {
+			respondBadRequest(c, "file_invalid", fmt.Sprintf("failed to decompress file: %v", err.Error()))
 			return
 		}
-
-		_, err := seeker.Seek(0, io.SeekStart)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "file_invalid",
-				"message": fmt.Sprintf("failed to reset file pointer: %v", err.Error()),
-			})
-			return
-		}
-
-		gzipReader, err := gzip.NewReader(f)
-		if err != nil {
-
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "file_invalid",
-				"message": fmt.Sprintf("failed to open gzipped cif file : %v", err.Error()),
-			})
-			return
-		}
-
-		_, err = io.Copy(fConv, gzipReader)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "file_invalid",
-				"message": fmt.Sprintf("failed to copy untared coordinates to temporary cif file: %v", err.Error()),
-			})
-			return
-		}
-		err = gzipReader.Close()
-		if err != nil {
-
-			log.Println("There was an issue closing a file after reading it")
-		}
-
 		f = fConv
 	}
 	if isPDB {
@@ -483,10 +427,7 @@ func AddCoordinates(c *gin.Context) {
 		if !gzipped {
 			_, err := io.Copy(fConv, f)
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"status":  "file_invalid",
-					"message": fmt.Sprintf("failed to copy coordinates to temporary cif file: %v", err.Error()),
-				})
+				respondBadRequest(c, "file_invalid", fmt.Sprintf("failed to copy coordinates to temporary cif file: %v", err.Error()))
 				return
 			}
 		}
@@ -522,28 +463,17 @@ func AddCoordinates(c *gin.Context) {
 		// Wait for processing to finish
 		pyExec := <-pythonExecCh
 		if pyExec.err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  pyExec.err.Error(),
-				"message": pyExec.errorMsg,
-			})
+			respondBadRequest(c, pyExec.err.Error(), pyExec.errorMsg)
 			return
 		}
 		// read converted file again
 		f, err = os.Open(cifFileForConverterPath)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "pdb_invalid_2",
-				"message": fmt.Sprintf("pdb_extract conversion from pdb to cif failed to write a file: %v", err.Error()),
-			})
+			respondBadRequest(c, "pdb_invalid_2", fmt.Sprintf("pdb_extract conversion from pdb to cif failed to write a file: %v", err.Error()))
+			return
 		}
 	}
-	err = fConv.Close()
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "file_invalid",
-			"message": fmt.Sprintf("couldn't close file used for writing %v", err.Error()),
-		})
-	}
+	defer deferClose(fConv, "temporary converter file")
 	cifText, err := parser.PDBconvertFromReader(
 		scientificMetadata,
 		"",
@@ -552,35 +482,28 @@ func AddCoordinates(c *gin.Context) {
 		f, // changed the oscem converter
 	)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "conversion_to_cif_fails",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "conversion_to_cif_fails", err.Error())
 		return
 	}
 	// defer os.Remove(fileUncompressed)
 
 	err = parser.WriteCif(cifText, cifFileForConverterPath)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "writing_cif_fails",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "writing_cif_fails", err.Error())
 		return
 	}
 	client := &http.Client{}
 	mockFileUpload := onedep.FileUpload{
 		Name:    "coordinates.cif",
-		Type:    "co-cif",
+		Type:    onedep.CO_CIF,
 		Details: "",
 	}
 	cifFile, err := os.Open(cifFileForConverterPath)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, &onedep.ResponseType{
-			Status:  "cif_file_issue",
-			Message: err.Error(),
-		})
+		respondBadRequest(c, "cif_file_issue", err.Error())
+		return
 	}
+	defer deferClose(cifFile, "coordinates cif file")
 
 	fD := onedep.NewDepositionFile(depID, mockFileUpload)
 	fDReq, errResp := fD.PrepareDeposition()
@@ -593,16 +516,12 @@ func AddCoordinates(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
-	err = cifFile.Close()
-	if err != nil {
-		log.Println("There was an issue closing a file after reading it")
-	}
+
 	uploadedFile, errResp := fD.UploadFile(client, fDReq, bearer)
 	if errResp != nil {
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
-	//defer os.Remove(cifFileForConverterPath)
 
 	c.JSON(http.StatusOK, uploadedFile)
 
@@ -624,22 +543,17 @@ func DownloadMetadata(c *gin.Context) {
 
 	// Bind the JSON payload into a metadata
 	if err := c.ShouldBindJSON(&scientificMetadata); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "invalid_request_body",
-			"message": fmt.Sprintf("Failed to parse metadata body: %v", err.Error()),
-		})
+		respondBadRequest(c, "invalid_request_body", fmt.Sprintf("Failed to parse metadata body: %v", err.Error()))
 		return
 	}
 	// create a temporary cif file that will be used for a deposition
 	finalCif, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "cif_creation_fails",
-			"message": "Failed to create a file to write cif file with metadata.",
-		})
+		respondBadRequest(c, "cif_creation_fails", "Failed to create a file to write cif file with metadata.")
 		return
 	}
 	finalCifPath := finalCif.Name()
+	defer deferRemove(finalCifPath)
 
 	// convert OSCEM-JSON to mmCIF
 	cifText, err := parser.EMDBconvert(
@@ -649,28 +563,17 @@ func DownloadMetadata(c *gin.Context) {
 		"data/mmcif_pdbx_v50.dic",
 	)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "conversion_to_cif_fails",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "conversion_to_cif_fails", err.Error())
 		return
 	}
 	err = parser.WriteCif(cifText, finalCifPath)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "writing_cif_fails",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "writing_cif_fails", err.Error())
 		return
 	}
 
 	c.Header("Content-Type", "application/octet-stream")
 	c.FileAttachment(finalCifPath, "metadata.cif")
-
-	err = os.Remove(finalCifPath)
-	if err != nil {
-		log.Println("There was an issue removing a temporary file")
-	}
 
 }
 
@@ -690,10 +593,7 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 
 	err := c.Request.ParseMultipartForm(10 << 20)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "body_invalid",
-			"message": "Failed to parse Form data.",
-		})
+		respondBadRequest(c, "body_invalid", "Failed to parse Form data.")
 		return
 	}
 
@@ -702,115 +602,56 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 	// parse extracted metadata from SciCat
 	metadataStr := c.PostForm("scientificMetadata")
 	if metadataStr == "{}" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "body_invalid",
-			"message": "Missing scientific metadata.",
-		})
+		respondBadRequest(c, "body_invalid", "Missing scientific metadata.")
 		return
 	}
 	// Parse  JSON string into the OSCEM format
 	var scientificMetadata map[string]any
 	err = json.Unmarshal([]byte(metadataStr), &scientificMetadata)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "body_invalid",
-			"message": "Failed to parse scientific metadata to JSON.",
-		})
+		respondBadRequest(c, "body_invalid", "Failed to parse scientific metadata to JSON.")
 		return
 	}
 	// open the multipart file header
 	fMP, err := cooFile.Open()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "file_invalid",
-			"message": fmt.Sprintf("Failed to open file header: %v", err.Error()),
-		})
+		respondBadRequest(c, "file_invalid", fmt.Sprintf("Failed to open file header: %v", err.Error()))
 		return
 	}
 
 	passedName := cooFile.Filename
-	var isPDB = false
-	passedNameChunks := strings.Split(passedName, ".")
-	for i := range passedNameChunks {
-		if passedNameChunks[i] == "pdb" {
-			isPDB = true
-		}
-	}
+	isPDB := isPDBFile(passedName)
 	f := io.Reader(fMP)
+	defer deferClose(fMP, "multipart file")
+
 	fConv, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "file_invalid",
-			"message": fmt.Sprintf("failed to create cif file to combine metadata and coordinates: %v", err.Error()),
-		})
+		respondBadRequest(c, "file_invalid", fmt.Sprintf("failed to create cif file to combine metadata and coordinates: %v", err.Error()))
 		return
 	}
-	err = fMP.Close()
-	if err != nil {
-		log.Println("There was an issue closing a file after reading it")
-	}
 	cifFileForConverterPath := fConv.Name()
+	defer deferRemove(cifFileForConverterPath)
 
 	gzipped, err := IsGzipped(f)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "file_invalid",
-			"message": fmt.Sprintf("failed to open cif file to read coordinates: %v", err.Error()),
-		})
+		respondBadRequest(c, "file_invalid", fmt.Sprintf("failed to open cif file to read coordinates: %v", err.Error()))
 		return
 	}
 	if gzipped {
-		seeker, ok := f.(io.Seeker)
-		if !ok {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "file_invalid",
-				"message": "file does not support seeking",
-			})
+		if err := decompressGzipToFile(f, fConv); err != nil {
+			respondBadRequest(c, "file_invalid", fmt.Sprintf("failed to decompress file: %v", err.Error()))
 			return
-		}
-
-		_, err := seeker.Seek(0, io.SeekStart)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "file_invalid",
-				"message": fmt.Sprintf("failed to reset file pointer: %v", err.Error()),
-			})
-			return
-		}
-
-		gzipReader, err := gzip.NewReader(f)
-		if err != nil {
-
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "file_invalid",
-				"message": fmt.Sprintf("failed to open gzipped cif file : %v", err.Error()),
-			})
-			return
-		}
-
-		_, err = io.Copy(fConv, gzipReader)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "file_invalid",
-				"message": fmt.Sprintf("failed to copy untared coordinates to temporary cif file: %v", err.Error()),
-			})
-			return
-		}
-		err = gzipReader.Close()
-		if err != nil {
-
-			log.Println("There was an issue closing a file after reading it")
 		}
 	}
+
+	defer deferClose(fConv, "temporary converter file")
+
 	if isPDB {
 		//need to save file locally first
 		if !gzipped {
 			_, err := io.Copy(fConv, f)
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"status":  "file_invalid",
-					"message": fmt.Sprintf("failed to copy coordinates to temporary cif file: %v", err.Error()),
-				})
+				respondBadRequest(c, "file_invalid", fmt.Sprintf("failed to copy coordinates to temporary cif file: %v", err.Error()))
 				return
 			}
 		}
@@ -843,27 +684,18 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 			}{outputBuffer.String(), nil}
 
 		}()
-		err = fConv.Close()
-		if err != nil {
 
-			log.Println("There was an issue closing a file after reading it")
-		}
 		// Wait for processing to finish
 		pyExec := <-pythonExecCh
 		if pyExec.err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  pyExec.err.Error(),
-				"message": pyExec.errorMsg,
-			})
+			respondBadRequest(c, pyExec.err.Error(), pyExec.errorMsg)
 			return
 		}
 		// read converted file again
 		f, err = os.Open(cifFileForConverterPath)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "pdb_invalid_2",
-				"message": fmt.Sprintf("pdb_extract conversion from pdb to cif failed to write a file: %v", err.Error()),
-			})
+			respondBadRequest(c, "pdb_invalid_2", fmt.Sprintf("pdb_extract conversion from pdb to cif failed to write a file: %v", err.Error()))
+			return
 		}
 	}
 
@@ -875,29 +707,19 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 		f,
 	)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "conversion_to_cif_fails",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "conversion_to_cif_fails", err.Error())
 		return
 	}
 	// defer os.Remove(fileUncompressed)
 
 	err = parser.WriteCif(cifText, cifFileForConverterPath)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "writing_cif_fails",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "writing_cif_fails", err.Error())
 		return
 	}
 
 	c.Header("Content-Type", "application/octet-stream")
 	c.FileAttachment(cifFileForConverterPath, "metadata.cif")
-	err = os.Remove(cifFileForConverterPath)
-	if err != nil {
-		log.Println("There was an issue removing a temporary file")
-	}
 }
 
 // Create handles the creation of a new deposition
@@ -918,7 +740,7 @@ func StartProcess(c *gin.Context) {
 	bearer := c.PostForm("jwtToken")
 	_, err := onedep.ProcessDeposition(client, depID, bearer)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err})
+		respondBadRequest(c, "process_failed", err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"fileID": depID})
@@ -940,22 +762,17 @@ func EmpiarMetadata(c *gin.Context) {
 
 	// Bind the JSON payload into a metadata
 	if err := c.ShouldBindJSON(&scientificMetadata); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "invalid_request_body",
-			"message": fmt.Sprintf("Failed to parse metadata body: %v", err.Error()),
-		})
+		respondBadRequest(c, "invalid_request_body", fmt.Sprintf("Failed to parse metadata body: %v", err.Error()))
 		return
 	}
 	// create a temporary cif file that will be used for a deposition
 	finalCif, err := os.CreateTemp("", "metadata.cif")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "cif_creation_fails",
-			"message": "Failed to create a file to write cif file with metadata.",
-		})
+		respondBadRequest(c, "cif_creation_fails", "Failed to create a file to write cif file with metadata.")
 		return
 	}
 	finalCifPath := finalCif.Name()
+	defer deferRemove(finalCifPath)
 
 	// convert OSCEM-JSON to mmCIF
 	cifText, err := parser.EMDBconvert(
@@ -965,28 +782,17 @@ func EmpiarMetadata(c *gin.Context) {
 		"data/mmcif_pdbx_v50.dic",
 	)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "conversion_to_cif_fails",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "conversion_to_cif_fails", err.Error())
 		return
 	}
 	err = parser.WriteCif(cifText, finalCifPath)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "writing_cif_fails",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "writing_cif_fails", err.Error())
 		return
 	}
 
 	c.Header("Content-Type", "application/octet-stream")
 	c.FileAttachment(finalCifPath, "metadata.cif")
-
-	err = os.Remove(finalCifPath)
-	if err != nil {
-		log.Println("There was an issue closing a file after reading it")
-	}
 
 }
 
@@ -1003,17 +809,11 @@ func EmpiarMetadata(c *gin.Context) {
 func EmpiarSchema(c *gin.Context) {
 	schema, err := os.ReadFile("data/empiar_deposition.schema.json")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "no_empiar_schema",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "no_empiar_schema", err.Error())
 		return
 	}
 	if !IsValidJSON(string(schema)) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "schema_invalid",
-			"message": err.Error(),
-		})
+		respondBadRequest(c, "schema_invalid", err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
