@@ -14,10 +14,13 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/SwissOpenEM/Depositor/auth"
 	"github.com/SwissOpenEM/Depositor/depositions/onedep"
 
 	docs "github.com/SwissOpenEM/Depositor/docs"
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	parser "github.com/osc-em/converter-OSCEM-to-mmCIF/parser"
 	swaggerfiles "github.com/swaggo/files"
@@ -837,16 +840,69 @@ func GetVersion(c *gin.Context) {
 func main() {
 	fmt.Println(ALLOW_ORIGINS, PORT)
 	router := gin.Default()
+
+	// Load auth configuration
+	authConfig := auth.LoadAuthConfigFromEnv()
+
+	// Setup CORS
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{ALLOW_ORIGINS},
-		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders: []string{"Origin", "Content-Type", "Accept"},
+		AllowOrigins:     []string{ALLOW_ORIGINS},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
+		AllowCredentials: true,
 	}))
+
+	// Setup session store
+	authKey, err := auth.GenerateRandomByteSlice(64)
+	if err != nil {
+		log.Fatalf("Failed to generate auth key: %v", err)
+	}
+	encKey, err := auth.GenerateRandomByteSlice(32)
+	if err != nil {
+		log.Fatalf("Failed to generate encryption key: %v", err)
+	}
+	store := cookie.NewStore(authKey, encKey)
+	store.Options(sessions.Options{
+		HttpOnly: true,
+		SameSite: http.SameSiteNoneMode,
+	})
+	router.Use(sessions.SessionsMany([]string{"auth", "user"}, store))
+
+	// Setup authentication handler if not disabled
+	var authHandler *auth.AuthHandler
+	if !authConfig.Disable {
+		if err := authConfig.Validate(); err != nil {
+			log.Printf("Warning: Auth configuration invalid, running without authentication: %v", err)
+			authConfig.Disable = true
+		} else {
+			authHandler, err = auth.NewAuthHandler(authConfig)
+			if err != nil {
+				log.Printf("Warning: Failed to initialize auth handler, running without authentication: %v", err)
+				authConfig.Disable = true
+			}
+		}
+	}
 
 	docs.SwaggerInfo.BasePath = router.BasePath()
 	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
 
+	// Auth endpoints
+	if authHandler != nil {
+		router.GET("/auth/login", authHandler.GetLogin)
+		router.GET("/auth/callback", authHandler.GetCallback)
+		router.GET("/auth/logout", authHandler.GetLogout)
+		router.GET("/auth/userinfo", authHandler.GetUserinfo)
+	}
+
+	// Public endpoints
 	router.GET("/version", GetVersion)
+
+	// Apply optional auth middleware to extract token if available
+	if authHandler != nil {
+		router.Use(authHandler.OptionalAuthMiddleware())
+	}
+
+	// OneDep endpoints
 	router.POST("/onedep", Create)
 	router.POST("/onedep/:depID/file", AddFile)
 	router.POST("/onedep/:depID/metadata", AddMetadata)
@@ -855,6 +911,7 @@ func main() {
 	router.POST("/onedep/metadata", DownloadMetadata)
 	router.POST("/onedep/pdb", DownloadCoordinatesWithMetadata)
 
+	// EMPIAR endpoints
 	router.POST("/empiar/metadata", EmpiarMetadata)
 	router.GET("/empiar/schema", EmpiarSchema)
 
