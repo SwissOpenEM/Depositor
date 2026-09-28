@@ -5,7 +5,8 @@ import (
 	"mime/multipart"
 )
 
-const baseURL = "https://onedep-depui-test.wwpdb.org/deposition/"
+const baseAuthURL = "https://onedep-depui-test.wwpdb.org/deposition/"
+const baseURL = baseAuthURL + "api/v1/depositions/"
 
 // these constants are described in the definition of CCP4 format used for mrc files
 const (

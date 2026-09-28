@@ -16,7 +16,7 @@ import (
 // sends a request to OneDep to get a new access token from a refresh token
 func RefreshToken(client *http.Client, refreshToken string) (TokenResponse, error) {
 	var tokenResp TokenResponse
-	url := baseURL + "auth/tokens/refresh"
+	url := baseAuthURL + "auth/tokens/refresh"
 	body, err := json.Marshal(map[string]string{"refresh_token": refreshToken})
 	if err != nil {
 		return tokenResp, err
@@ -63,13 +63,18 @@ func (credentials *Credentials) authenticate(client *http.Client) error {
 
 // decodes  the response
 func decodeResponse[T FileResponse | DepositionResponse | TokenResponse](resp *http.Response) (T, error) {
-	var rOneDep T
-	decoder := json.NewDecoder(resp.Body)
-	err := decoder.Decode(&rOneDep)
-	if err != nil {
-		return rOneDep, err
-	}
-	return rOneDep, nil
+    var rOneDep T
+
+    rawBody, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return rOneDep, err
+    }
+    log.Printf("OneDep response: status=%d body=%s", resp.StatusCode, rawBody)
+
+    if err := json.Unmarshal(rawBody, &rOneDep); err != nil {
+        return rOneDep, err
+    }
+    return rOneDep, nil
 }
 
 // sends a request to OneDep to create a new deposition
