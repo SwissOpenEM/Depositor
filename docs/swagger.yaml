@@ -34,11 +34,6 @@ definitions:
       voxel_type:
         type: string
     type: object
-  onedep.CreatedDeposition:
-    properties:
-      depID:
-        type: string
-    type: object
   onedep.DepositionResponse:
     properties:
       bmrb_id:
@@ -65,6 +60,8 @@ definitions:
         type: string
       pdb_id:
         type: string
+      refreshToken:
+        type: string
       site:
         type: string
       site_url:
@@ -88,6 +85,8 @@ definitions:
         type: object
       name:
         description: not there
+        type: string
+      refreshToken:
         type: string
       type:
         $ref: '#/definitions/onedep.OneDepType'
@@ -176,6 +175,13 @@ definitions:
     - XA_TOP
     - XS_CIF
     - XS_MTZ
+  onedep.ProcessResponse:
+    properties:
+      fileID:
+        type: string
+      refreshToken:
+        type: string
+    type: object
   onedep.RequestCreate:
     properties:
       coordinates:
@@ -183,8 +189,6 @@ definitions:
       country:
         type: string
       email:
-        type: string
-      jwtToken:
         type: string
       method:
         type: string
@@ -194,16 +198,20 @@ definitions:
         type: array
       password:
         type: string
+      refreshToken:
+        type: string
     required:
     - country
     - email
-    - jwtToken
     - method
     - orcidIds
+    - refreshToken
     type: object
   onedep.ResponseType:
     properties:
       message:
+        type: string
+      refreshToken:
         type: string
       status:
         type: string
@@ -358,9 +366,9 @@ paths:
         name: fileMetadata
         required: true
         type: string
-      - description: JWT token for OneDep API
+      - description: refresh token for OneDep API
         in: formData
-        name: jwtToken
+        name: resfreshToken
         required: true
         type: string
       produces:
@@ -394,9 +402,9 @@ paths:
         name: depID
         required: true
         type: string
-      - description: JWT token for OneDep API
+      - description: refresh token for OneDep API
         in: formData
-        name: jwtToken
+        name: resfreshToken
         required: true
         type: string
       - description: Scientific metadata as a JSON string; expects elements from OSCEM
@@ -434,9 +442,9 @@ paths:
         name: depID
         required: true
         type: string
-      - description: JWT token for OneDep API
+      - description: refresh token for OneDep API
         in: formData
-        name: jwtToken
+        name: resfreshToken
         required: true
         type: string
       - description: File to upload
@@ -479,18 +487,18 @@ paths:
         name: depID
         required: true
         type: string
-      - description: JWT token for OneDep API
+      - description: refresh token for OneDep API
         in: formData
-        name: jwtToken
+        name: resfreshToken
         required: true
         type: string
       produces:
       - application/json
       responses:
         "200":
-          description: Deposition ID
+          description: Deposition ID and refresh token
           schema:
-            $ref: '#/definitions/onedep.CreatedDeposition'
+            $ref: '#/definitions/onedep.ProcessResponse'
         "400":
           description: Error response
           schema:

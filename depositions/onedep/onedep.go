@@ -13,8 +13,56 @@ import (
 	"strconv"
 )
 
+// sends a request to OneDep to get a new access token from a refresh token
+func RefreshToken(client *http.Client, refreshToken string) (TokenResponse, error) {
+	var tokenResp TokenResponse
+	url := baseURL + "auth/tokens/refresh"
+	body, err := json.Marshal(map[string]string{"refresh_token": refreshToken})
+	if err != nil {
+		return tokenResp, err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		return tokenResp, err
+	}
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return tokenResp, err
+	}
+	statusCode := resp.StatusCode
+	tokenResp, err = decodeResponse[TokenResponse](resp)
+	if err != nil {
+		return tokenResp, err
+	}
+	err = resp.Body.Close()
+	if err != nil {
+		return tokenResp, err
+	}
+	if statusCode == 200 || statusCode == 201 {
+		return tokenResp, nil
+	}
+
+	return tokenResp, fmt.Errorf("refresh token failed: status code %v, code %s, message %s", statusCode, tokenResp.Code, tokenResp.Message)
+}
+
+func (credentials *Credentials) authenticate(client *http.Client) error {
+	if credentials.AccessToken != "" {
+		return nil
+	}
+	authResponse, err := RefreshToken(client, credentials.RefreshToken)
+	if err != nil {
+		return err
+	}
+	credentials.AccessToken = authResponse.AccessToken
+	credentials.RefreshToken = authResponse.RefreshToken
+	return nil
+}
+
 // decodes  the response
-func decodeResponse[T FileResponse | DepositionResponse](resp *http.Response) (T, error) {
+func decodeResponse[T FileResponse | DepositionResponse | TokenResponse](resp *http.Response) (T, error) {
 	var rOneDep T
 	decoder := json.NewDecoder(resp.Body)
 	err := decoder.Decode(&rOneDep)
@@ -25,8 +73,15 @@ func decodeResponse[T FileResponse | DepositionResponse](resp *http.Response) (T
 }
 
 // sends a request to OneDep to create a new deposition
-func CreateDeposition(client *http.Client, userInput UserInfo, token string) (DepositionResponse, *ResponseType) {
+func CreateDeposition(client *http.Client, userInput UserInfo, credentials *Credentials) (DepositionResponse, *ResponseType) {
 	var deposition DepositionResponse
+	if err := credentials.authenticate(client); err != nil {
+		return deposition, &ResponseType{
+			Status:  "error authenticate",
+			Message: err.Error(),
+		}
+	}
+
 	// Convert the user input to JSON
 	jsonInput, err := json.Marshal(userInput)
 	if err != nil {
@@ -44,7 +99,7 @@ func CreateDeposition(client *http.Client, userInput UserInfo, token string) (De
 		}
 	}
 
-	req.Header.Add("Authorization", "Bearer "+token)
+	req.Header.Add("Authorization", "Bearer "+credentials.AccessToken)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
@@ -213,8 +268,15 @@ func (fD *DepositionFile) AddFileToRequest(client *http.Client, file multipart.F
 }
 
 // sends request to upload file to OneDep
-func (fD *DepositionFile) UploadFile(client *http.Client, fDreq *FileDepositionRequest, token string) (FileResponse, *ResponseType) {
+func (fD *DepositionFile) UploadFile(client *http.Client, fDreq *FileDepositionRequest, credentials *Credentials) (FileResponse, *ResponseType) {
 	var uploadedFile FileResponse
+	if err := credentials.authenticate(client); err != nil {
+		return uploadedFile, &ResponseType{
+			Status:  "error authenticate",
+			Message: err.Error(),
+		}
+	}
+
 	// Prepare the request
 	url := baseURL + fD.DId + "/files/"
 	req, err := http.NewRequest("POST", url, fDreq.Body)
@@ -224,7 +286,7 @@ func (fD *DepositionFile) UploadFile(client *http.Client, fDreq *FileDepositionR
 			Message: err.Error(),
 		}
 	}
-	req.Header.Add("Authorization", "Bearer "+token)
+	req.Header.Add("Authorization", "Bearer "+credentials.AccessToken)
 	req.Header.Set("Content-Type", fDreq.Writer.FormDataContentType())
 
 	// Send the request
@@ -262,8 +324,15 @@ func (fD *DepositionFile) UploadFile(client *http.Client, fDreq *FileDepositionR
 }
 
 // sends a request to OneDep to add files' metadata
-func (fD *DepositionFile) AddMetadataToFile(client *http.Client, token string) (FileResponse, *ResponseType) {
+func (fD *DepositionFile) AddMetadataToFile(client *http.Client, credentials *Credentials) (FileResponse, *ResponseType) {
 	var uploadedFile FileResponse
+	if err := credentials.authenticate(client); err != nil {
+		return uploadedFile, &ResponseType{
+			Status:  "error authenticate",
+			Message: err.Error(),
+		}
+	}
+
 	data := map[string]interface{}{
 		"voxel": map[string]interface{}{
 			"spacing": map[string]float32{
@@ -291,7 +360,7 @@ func (fD *DepositionFile) AddMetadataToFile(client *http.Client, token string) (
 		}
 	}
 
-	req.Header.Add("Authorization", "Bearer "+token)
+	req.Header.Add("Authorization", "Bearer "+credentials.AccessToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	// Send the request
@@ -329,12 +398,15 @@ func (fD *DepositionFile) AddMetadataToFile(client *http.Client, token string) (
 }
 
 // sends a request to OneDep to process a  deposition
-func ProcessDeposition(client *http.Client, deposition string, token string) (string, error) {
+func ProcessDeposition(client *http.Client, deposition string, credentials *Credentials) (string, error) {
+	if err := credentials.authenticate(client); err != nil {
+		return "", fmt.Errorf("errored when sending request to the server: %v", err)
+	}
 
 	url := baseURL + deposition + "/process"
 	req, _ := http.NewRequest("POST", url, new(bytes.Buffer))
 
-	req.Header.Add("Authorization", "Bearer "+token)
+	req.Header.Add("Authorization", "Bearer "+credentials.AccessToken)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := client.Do(req)

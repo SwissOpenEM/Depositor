@@ -280,8 +280,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "JWT token for OneDep API",
-                        "name": "jwtToken",
+                        "description": "refresh token for OneDep API",
+                        "name": "resfreshToken",
                         "in": "formData",
                         "required": true
                     }
@@ -331,8 +331,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "JWT token for OneDep API",
-                        "name": "jwtToken",
+                        "description": "refresh token for OneDep API",
+                        "name": "resfreshToken",
                         "in": "formData",
                         "required": true
                     },
@@ -389,8 +389,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "JWT token for OneDep API",
-                        "name": "jwtToken",
+                        "description": "refresh token for OneDep API",
+                        "name": "resfreshToken",
                         "in": "formData",
                         "required": true
                     },
@@ -454,17 +454,17 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "JWT token for OneDep API",
-                        "name": "jwtToken",
+                        "description": "refresh token for OneDep API",
+                        "name": "resfreshToken",
                         "in": "formData",
                         "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Deposition ID",
+                        "description": "Deposition ID and refresh token",
                         "schema": {
-                            "$ref": "#/definitions/onedep.CreatedDeposition"
+                            "$ref": "#/definitions/onedep.ProcessResponse"
                         }
                     },
                     "400": {
@@ -563,14 +563,6 @@ const docTemplate = `{
                 }
             }
         },
-        "onedep.CreatedDeposition": {
-            "type": "object",
-            "properties": {
-                "depID": {
-                    "type": "string"
-                }
-            }
-        },
         "onedep.DepositionResponse": {
             "type": "object",
             "properties": {
@@ -610,6 +602,9 @@ const docTemplate = `{
                 "pdb_id": {
                     "type": "string"
                 },
+                "refreshToken": {
+                    "type": "string"
+                },
                 "site": {
                     "type": "string"
                 },
@@ -643,6 +638,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "description": "not there",
+                    "type": "string"
+                },
+                "refreshToken": {
                     "type": "string"
                 },
                 "type": {
@@ -744,14 +742,25 @@ const docTemplate = `{
                 "XS_MTZ"
             ]
         },
+        "onedep.ProcessResponse": {
+            "type": "object",
+            "properties": {
+                "fileID": {
+                    "type": "string"
+                },
+                "refreshToken": {
+                    "type": "string"
+                }
+            }
+        },
         "onedep.RequestCreate": {
             "type": "object",
             "required": [
                 "country",
                 "email",
-                "jwtToken",
                 "method",
-                "orcidIds"
+                "orcidIds",
+                "refreshToken"
             ],
             "properties": {
                 "coordinates": {
@@ -761,9 +770,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "email": {
-                    "type": "string"
-                },
-                "jwtToken": {
                     "type": "string"
                 },
                 "method": {
@@ -777,6 +783,9 @@ const docTemplate = `{
                 },
                 "password": {
                     "type": "string"
+                },
+                "refreshToken": {
+                    "type": "string"
                 }
             }
         },
@@ -784,6 +793,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "message": {
+                    "type": "string"
+                },
+                "refreshToken": {
                     "type": "string"
                 },
                 "status": {

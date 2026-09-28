@@ -147,7 +147,7 @@ func Create(c *gin.Context) {
 		respondBadRequest(c, "method_unknown", fmt.Sprintf("unknown EM method %v", body.Method))
 		return
 	}
-	bearer := body.JWTToken
+	credentials := &onedep.Credentials{RefreshToken: body.RefreshToken}
 	depData := onedep.UserInfo{
 		Email:       email,
 		Users:       body.OrcidIds,
@@ -158,11 +158,13 @@ func Create(c *gin.Context) {
 
 	client := &http.Client{}
 
-	deposition, resp := onedep.CreateDeposition(client, depData, bearer)
+	deposition, resp := onedep.CreateDeposition(client, depData, credentials)
 	if resp != nil {
-		respondBadRequest(c, resp.Status, resp.Message)
+		resp.RefreshToken = credentials.RefreshToken
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
+	deposition.RefreshToken = credentials.RefreshToken
 	c.JSON(http.StatusCreated, deposition)
 
 }
@@ -176,7 +178,7 @@ func Create(c *gin.Context) {
 // @Param depID path string true "Deposition ID to which a file should be uploaded"
 // @Param file formData []file true "File to upload" collectionFormat(multi)
 // @Param fileMetadata formData string true "File metadata as a JSON string"
-// @Param jwtToken formData string true "JWT token for OneDep API"
+// @Param resfreshToken formData string true "refresh token for OneDep API"
 // @Success 200 {object} onedep.FileResponse "File ID"
 // @Failure 400 {object} onedep.ResponseType "Error response"
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
@@ -188,7 +190,7 @@ func AddFile(c *gin.Context) {
 		return
 	}
 	depID := c.Param("depID")
-	bearer := c.PostForm("jwtToken")
+	credentials := &onedep.Credentials{RefreshToken: c.PostForm("refreshToken")}
 	cooFile := c.Request.MultipartForm.File["file"][0] //file
 	metadataFilesStr := c.PostForm("fileMetadata")     //files Metadata
 
@@ -233,23 +235,27 @@ func AddFile(c *gin.Context) {
 		return
 	}
 	defer deferClose(file, "uploaded file")
-	uploadedFileDecoded, errResp := fD.UploadFile(client, fDReq, bearer)
+	uploadedFileDecoded, errResp := fD.UploadFile(client, fDReq, credentials)
 	if errResp != nil {
+		errResp.RefreshToken = credentials.RefreshToken
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
 
 	for j := range onedep.NeedMeta {
 		if string(fileMetadata.Type) == onedep.NeedMeta[j] {
-			uploadedFileDecoded, errResp = fD.AddMetadataToFile(client, bearer)
+			uploadedFileDecoded, errResp = fD.AddMetadataToFile(client, credentials)
 			if errResp != nil {
+				errResp.RefreshToken = credentials.RefreshToken
 				c.JSON(http.StatusBadRequest, errResp)
 				return
 			}
+			uploadedFileDecoded.RefreshToken = credentials.RefreshToken
 			c.JSON(http.StatusOK, uploadedFileDecoded)
 			return
 		}
 	}
+	uploadedFileDecoded.RefreshToken = credentials.RefreshToken
 	c.JSON(http.StatusOK, uploadedFileDecoded)
 }
 
@@ -260,7 +266,7 @@ func AddFile(c *gin.Context) {
 // @Accept multipart/form-data
 // @Produce json
 // @Param depID path string true "Deposition ID to which a file should be uploaded"
-// @Param jwtToken formData string true "JWT token for OneDep API"
+// @Param resfreshToken formData string true "refresh token for OneDep API"
 // @Param scientificMetadata formData string true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
 // @Success 200 {object} onedep.FileResponse "File ID"
 // @Failure 400 {object} onedep.ResponseType "Error response"
@@ -274,7 +280,7 @@ func AddMetadata(c *gin.Context) {
 	}
 
 	depID := c.Param("depID")
-	bearer := c.PostForm("jwtToken")
+	credentials := &onedep.Credentials{RefreshToken: c.PostForm("refreshToken")}
 
 	// FIX ME add an OSCEM SCHEMA
 	// Extract entries from multipart form
@@ -342,12 +348,14 @@ func AddMetadata(c *gin.Context) {
 		return
 	}
 
-	uploadedFile, errResp := fD.UploadFile(client, fDReq, bearer)
+	uploadedFile, errResp := fD.UploadFile(client, fDReq, credentials)
 	if errResp != nil {
+		errResp.RefreshToken = credentials.RefreshToken
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
 
+	uploadedFile.RefreshToken = credentials.RefreshToken
 	c.JSON(http.StatusOK, uploadedFile)
 }
 
@@ -358,7 +366,7 @@ func AddMetadata(c *gin.Context) {
 // @Accept multipart/form-data
 // @Produce json
 // @Param depID path string true "Deposition ID to which a file should be uploaded"
-// @Param jwtToken formData string true "JWT token for OneDep API"
+// @Param resfreshToken formData string true "refresh token for OneDep API"
 // @Param file formData file true "File to upload"
 // @Param scientificMetadata formData string true "Scientific metadata as a JSON string; expects elements from OSCEM on the top level"
 // @Success 200 {object} onedep.FileResponse "File ID"
@@ -373,7 +381,7 @@ func AddCoordinates(c *gin.Context) {
 	}
 
 	depID := c.Param("depID")
-	bearer := c.PostForm("jwtToken")
+	credentials := &onedep.Credentials{RefreshToken: c.PostForm("refreshToken")}
 	cooFile := c.Request.MultipartForm.File["file"][0]
 
 	// parse extracted metadata from SciCat
@@ -517,12 +525,14 @@ func AddCoordinates(c *gin.Context) {
 		return
 	}
 
-	uploadedFile, errResp := fD.UploadFile(client, fDReq, bearer)
+	uploadedFile, errResp := fD.UploadFile(client, fDReq, credentials)
 	if errResp != nil {
+		errResp.RefreshToken = credentials.RefreshToken
 		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
 
+	uploadedFile.RefreshToken = credentials.RefreshToken
 	c.JSON(http.StatusOK, uploadedFile)
 
 }
@@ -729,21 +739,21 @@ func DownloadCoordinatesWithMetadata(c *gin.Context) {
 // @Accept application/json
 // @Produce json
 // @Param depID path string true "Deposition ID to which a file should be uploaded"
-// @Param jwtToken  formData string true "JWT token for OneDep API"
-// @Success 200 {object} onedep.CreatedDeposition "Deposition ID"
+// @Param resfreshToken formData string true "refresh token for OneDep API"
+// @Success 200 {object} onedep.ProcessResponse "Deposition ID and refresh token"
 // @Failure 400 {object} onedep.ResponseType "Error response"
 // @Failure 500 {object} onedep.ResponseType "Internal server error"
 // @Router /onedep/{depID}/process [post]
 func StartProcess(c *gin.Context) {
 	depID := c.Param("depID")
 	client := &http.Client{}
-	bearer := c.PostForm("jwtToken")
-	_, err := onedep.ProcessDeposition(client, depID, bearer)
+	credentials := &onedep.Credentials{RefreshToken: c.PostForm("refreshToken")}
+	_, err := onedep.ProcessDeposition(client, depID, credentials)
 	if err != nil {
-		respondBadRequest(c, "process_failed", err.Error())
+		c.JSON(http.StatusBadRequest, onedep.ResponseType{Status: "process_failed", Message: err.Error(), RefreshToken: credentials.RefreshToken})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"fileID": depID})
+	c.JSON(http.StatusOK, onedep.ProcessResponse{FileID: depID, RefreshToken: credentials.RefreshToken})
 }
 
 // EmpiarMetadata handles creating of json file according to schema at https://github.com/emdb-empiar/empiar-depositor/blob/master/empiar_depositor/empiar_deposition.schema.json

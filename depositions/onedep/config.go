@@ -5,7 +5,7 @@ import (
 	"mime/multipart"
 )
 
-const baseURL = "https://onedep-depui-test.wwpdb.org/deposition/api/v1/depositions/"
+const baseURL = "https://onedep-depui-test.wwpdb.org/deposition/"
 
 // these constants are described in the definition of CCP4 format used for mrc files
 const (
@@ -18,13 +18,13 @@ const (
 )
 
 type RequestCreate struct {
-	Email       string   `json:"email" binding:"required,email"`
-	OrcidIds    []string `json:"orcidIds" binding:"required"`
-	Password    string   `json:"password"`
-	Country     string   `json:"country" binding:"required"`
-	Method      string   `json:"method" binding:"required"`
-	JWTToken    string   `json:"jwtToken" binding:"required"`
-	Coordinates bool     `json:"coordinates"`
+	Email        string   `json:"email" binding:"required,email"`
+	OrcidIds     []string `json:"orcidIds" binding:"required"`
+	Password     string   `json:"password"`
+	Country      string   `json:"country" binding:"required"`
+	Method       string   `json:"method" binding:"required"`
+	RefreshToken string   `json:"refreshToken" binding:"required"`
+	Coordinates  bool     `json:"coordinates"`
 }
 
 type FileMetadata struct {
@@ -34,11 +34,20 @@ type FileMetadata struct {
 	Details  string  `json:"details"`
 }
 type ResponseType struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
+	Status       string `json:"status"`
+	Message      string `json:"message"`
+	RefreshToken string `json:"refreshToken,omitempty"`
+}
+type Credentials struct {
+	AccessToken  string
+	RefreshToken string
 }
 type CreatedDeposition struct {
 	DepID string `json:"depID"`
+}
+type ProcessResponse struct {
+	FileID       string `json:"fileID"`
+	RefreshToken string `json:"refreshToken,omitempty"`
 }
 type UploadedFile struct {
 	DepID  string `json:"depID"`
@@ -174,22 +183,23 @@ const (
 // status:DEP
 // title:?]
 type DepositionResponse struct {
-	Email       string      `json:"email"`
-	Id          string      `json:"id"`
-	PDBid       string      `json:"pdb_id"`
-	EMDBid      string      `json:"emdb_id"`
-	BMRBid      string      `json:"bmrb_id"`
-	Title       string      `json:"title"`
-	HoldExpDate string      `json:"hold_exp_date"`
-	Created     string      `json:"created"`
-	LastLogin   string      `json:"last_login"`
-	Site        string      `json:"site"`
-	SiteUrl     string      `json:"site_url"`
-	Status      Status      `json:"status"`
-	Experiments any         `json:"experiments"` // FIX ME actual response type does not correspond to the documented.
-	Errors      OneDepError `json:"errors"`
-	Code        string      `json:"code"`
-	Message     string      `json:"message"`
+	Email        string      `json:"email"`
+	Id           string      `json:"id"`
+	PDBid        string      `json:"pdb_id"`
+	EMDBid       string      `json:"emdb_id"`
+	BMRBid       string      `json:"bmrb_id"`
+	Title        string      `json:"title"`
+	HoldExpDate  string      `json:"hold_exp_date"`
+	Created      string      `json:"created"`
+	LastLogin    string      `json:"last_login"`
+	Site         string      `json:"site"`
+	SiteUrl      string      `json:"site_url"`
+	Status       Status      `json:"status"`
+	Experiments  any         `json:"experiments"` // FIX ME actual response type does not correspond to the documented.
+	Errors       OneDepError `json:"errors"`
+	Code         string      `json:"code"`
+	Message      string      `json:"message"`
+	RefreshToken string      `json:"refreshToken,omitempty"`
 }
 
 type SpacingType struct {
@@ -220,13 +230,22 @@ type EmMapMetadata struct {
 // warnings:[map[code:upload_warning message:Deposition of a FSC file is strongly encouraged.]]]
 
 type FileResponse struct {
-	Id       int            `json:"id"`
-	Name     string         `json:"name"` // not there
-	Type     OneDepType     `json:"type"`
-	Created  string         `json:"created"`
-	Metadata map[string]any `json:"metadata"` // not there
-	Errors   any            `json:"errors"`   // FIX ME actual response type does not correspond to the documented.
-	Warnings any            `json:"warnings"` // FIX ME actual response type does not correspond to the documented.
+	Id           int            `json:"id"`
+	Name         string         `json:"name"` // not there
+	Type         OneDepType     `json:"type"`
+	Created      string         `json:"created"`
+	Metadata     map[string]any `json:"metadata"` // not there
+	Errors       any            `json:"errors"`   // FIX ME actual response type does not correspond to the documented.
+	Warnings     any            `json:"warnings"` // FIX ME actual response type does not correspond to the documented.
+	RefreshToken string         `json:"refreshToken,omitempty"`
+}
+
+type TokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	Errors       any    `json:"errors"`
+	Code         string `json:"code"`
+	Message      string `json:"message"`
 }
 
 var NeedMeta = []string{"vo-map", "add-map", "half-map", "mask-map"}
