@@ -8,7 +8,7 @@ import (
 	"log/slog"
 
 	core "github.com/SwissOpenEM/Depositor/internal/core"
-	"github.com/SwissOpenEM/Depositor/internal/webserver"
+	webserver "github.com/SwissOpenEM/Depositor/internal/webserver"
 )
 
 // String can be overwritten by using linker flags: -ldflags "-X main.version=VERSION"
