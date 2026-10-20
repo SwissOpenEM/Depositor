@@ -1,0 +1,1089 @@
+openapi: 3.1.0
+info:
+  title: Deposition API
+  description: Service to create and manage depositions on OneDep.
+  version: 1.0.0
+servers:
+  - url: https://onedep-depui-test.wwpdb.org/deposition/api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Depositions
+    description: Operations for creating and managing depositions.
+  - name: Users
+    description: Operations for managing user access to a deposition.
+  - name: Files
+    description: Operations for managing files within a deposition.
+paths:
+  /depositions/new:
+    post:
+      summary: Create deposition
+      description: >
+        Create a new deposition. Access to the newly created deposition will be
+        restricted to the users identified by the provided ORCID iDs.
+      operationId: createDeposition
+      tags:
+        - Depositions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - users
+                - country
+                - experiments
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Main email address associated with this deposition.
+                users:
+                  type: array
+                  items:
+                    type: string
+                    pattern: ^\d{4}-\d{4}-\d{4}-\d{3}(\d|X)$
+                  description: ORCID iDs whose owners are allowed to access this deposition.
+                password:
+                  type: string
+                  description: >
+                    An alternative password to access this deposition. If not
+                    provided, one will be generated automatically and sent to
+                    the provided email address.
+                country:
+                  type: string
+                  description: Location of the institute.
+                experiments:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: "#/components/schemas/ExperimentTypeBase"
+                  description: Experiment types associated with the deposition.
+      responses:
+        "200":
+          description: Country maps to a different regional server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "201":
+          description: Deposition created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositionResponse"
+        "400":
+          description: Invalid parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Invalid ORCID iD provided.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /depositions:
+    get:
+      summary: List depositions
+      description: List depositions linked to the requesting user.
+      operationId: listDepositions
+      tags:
+        - Depositions
+      parameters:
+        - name: offset
+          in: query
+          required: false
+          description: Number of items to skip.
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of items to return.
+          schema:
+            type: integer
+            default: 10
+        - name: extra_fields
+          in: query
+          required: false
+          description: >
+            Comma-separated list of additive, opt-in fields to include in each
+            item of the response (e.g. `composite,em_type`). These fields are
+            omitted entirely by default so clients with a strict schema aren't
+            broken by unrecognized keys.
+          schema:
+            type: string
+            example: composite,em_type
+      responses:
+        "200":
+          description: A paginated list of depositions associated with the authenticated
+            user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositionListResponse"
+  /depositions/{dep_id}:
+    parameters:
+      - $ref: "#/components/parameters/dep_id"
+    get:
+      summary: Get deposition
+      description: Get information about a deposition.
+      operationId: getDeposition
+      tags:
+        - Depositions
+      parameters:
+        - name: extra_fields
+          in: query
+          required: false
+          description: >
+            Comma-separated list of additive, opt-in fields to include in the
+            response (e.g. `composite,em_type`). These fields are omitted
+            entirely by default so clients with a strict schema aren't broken by
+            unrecognized keys.
+          schema:
+            type: string
+            example: composite,em_type
+      responses:
+        "200":
+          description: Deposition details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositionResponse"
+        "404":
+          description: Deposition not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /depositions/{dep_id}/status:
+    parameters:
+      - $ref: "#/components/parameters/dep_id"
+    get:
+      summary: Get processing status
+      description: >
+        Poll the status of the file processing task running in the background.
+        Call this endpoint after starting processing via `/process` to track its
+        progress.
+      operationId: getDepositionStatus
+      tags:
+        - Depositions
+      responses:
+        "200":
+          description: Current processing status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessingStatus"
+        "404":
+          description: No status record found for this deposition.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /depositions/{dep_id}/process:
+    parameters:
+      - $ref: "#/components/parameters/dep_id"
+    post:
+      summary: Process files
+      description: >
+        Start the file processing step. If the required files were not yet
+        uploaded, it returns an error. Poll `/status` to track progress.
+      operationId: processDeposition
+      tags:
+        - Depositions
+      parameters:
+        - name: force
+          in: query
+          required: false
+          description: Force processing even if a processing task is already running.
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcessDeposition"
+      responses:
+        "200":
+          description: Processing started or an error occurred. Check the `status` field
+            in the response.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ProcessingStatus"
+                  - $ref: "#/components/schemas/Error"
+        "400":
+          description: Invalid parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Deposition not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /depositions/{dep_id}/users/:
+    parameters:
+      - $ref: "#/components/parameters/dep_id"
+    get:
+      summary: Get users
+      description: List users allowed to access the given deposition.
+      operationId: getDepositionUsers
+      tags:
+        - Users
+      responses:
+        "200":
+          description: A list of users with access to the deposition.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DepositorResponse"
+        "404":
+          description: Deposition not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Add users
+      description: Allow one or more users to access the given deposition.
+      operationId: addDepositionUsers
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/DepositorBase"
+      responses:
+        "200":
+          description: Users added successfully. Returns the list of added users.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DepositorResponse"
+        "400":
+          description: Invalid parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Deposition or ORCID iD not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /depositions/{dep_id}/users/{orcid}:
+    parameters:
+      - $ref: "#/components/parameters/dep_id"
+      - name: orcid
+        in: path
+        required: true
+        description: The user's Open Researcher and Contributor ID (ORCID).
+        schema:
+          type: string
+    delete:
+      summary: Remove user
+      description: Remove a user from the deposition.
+      operationId: removeDepositionUser
+      tags:
+        - Users
+      responses:
+        "204":
+          description: User removed successfully.
+        "404":
+          description: Deposition or user not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /depositions/{dep_id}/files/:
+    parameters:
+      - $ref: "#/components/parameters/dep_id"
+    get:
+      summary: Get files
+      description: List files in the deposition.
+      operationId: getDepositionFiles
+      tags:
+        - Files
+      responses:
+        "200":
+          description: A list of files in the deposition along with any validation messages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileListResponse"
+    post:
+      summary: Upload file
+      description: Upload a new file to the given deposition.
+      operationId: uploadDepositionFile
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - name
+                - type
+                - file
+              properties:
+                name:
+                  type: string
+                  description: The file name.
+                type:
+                  $ref: "#/components/schemas/FileType"
+                file:
+                  type: string
+                  format: binary
+                  description: The file content to upload.
+      responses:
+        "200":
+          description: The deposition is locked and cannot be edited.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "201":
+          description: File uploaded successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileUploadResponse"
+        "400":
+          description: Invalid parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /depositions/{dep_id}/files/{file_id}:
+    parameters:
+      - $ref: "#/components/parameters/dep_id"
+      - $ref: "#/components/parameters/file_id"
+    delete:
+      summary: Remove file
+      description: Remove a file from the deposition.
+      operationId: removeDepositionFile
+      tags:
+        - Files
+      responses:
+        "200":
+          description: The deposition is locked and cannot be edited.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "204":
+          description: File removed successfully.
+        "404":
+          description: File not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Unexpected error when removing the file.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /depositions/{dep_id}/files/{file_id}/metadata:
+    parameters:
+      - $ref: "#/components/parameters/dep_id"
+      - $ref: "#/components/parameters/file_id"
+    post:
+      summary: Update file metadata
+      description: >
+        Set metadata for a map file in the deposition. Only applicable to map
+        file types: `add-map`, `half-map`, `mask-map`, `vo-map`.
+      operationId: updateFileMetadata
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EMMapMetadata"
+      responses:
+        "200":
+          description: Metadata updated successfully. Returns the updated file details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResponse"
+        "400":
+          description: Invalid parameters or file type does not support metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: File not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /info/users/{orcid}:
+    parameters:
+      - name: orcid
+        in: path
+        required: true
+        description: The user's Open Researcher and Contributor ID (ORCID).
+        schema:
+          type: string
+    get:
+      summary: Get user name
+      description: >
+        Look up the full name for a user by their ORCID iD. First checks the
+        local database; if not found, queries the ORCID public API.
+      operationId: getUserName
+      tags:
+        - Users
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: The user's full name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - full_name
+                properties:
+                  full_name:
+                    type: string
+                    description: The user's full name.
+        "404":
+          description: User not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /users/{orcid}:
+    parameters:
+      - name: orcid
+        in: path
+        required: true
+        description: The user's Open Researcher and Contributor ID (ORCID).
+        schema:
+          type: string
+    post:
+      summary: Update user info
+      description: >
+        Create or update a user's email and/or verification status. This
+        endpoint is intended for internal partner services.
+      operationId: updateUser
+      tags:
+        - Users
+      security:
+        - partnerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepositorEmailUpdate"
+      responses:
+        "200":
+          description: User updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositorResponse"
+        "400":
+          description: Invalid parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    partnerAuth:
+      type: http
+      scheme: bearer
+      description: Token issued to trusted partner services.
+  parameters:
+    dep_id:
+      name: dep_id
+      in: path
+      required: true
+      description: Deposition identifier.
+      schema:
+        type: string
+    file_id:
+      name: file_id
+      in: path
+      required: true
+      description: The file identifier.
+      schema:
+        type: integer
+  schemas:
+    XRay:
+      type: object
+      description: Specifies an X-ray diffraction experiment. Coordinates are always
+        required for this experiment type.
+      required:
+        - type
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum:
+            - xray
+    Fiber:
+      type: object
+      description: Specifies a fiber diffraction experiment. Coordinates are always
+        required for this experiment type.
+      required:
+        - type
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum:
+            - fiber
+    Neutron:
+      type: object
+      description: Specifies a neutron diffraction experiment. Coordinates are always
+        required for this experiment type.
+      required:
+        - type
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum:
+            - neutron
+    EM:
+      type: object
+      description: Specifies an electron microscopy (EM) experiment.
+      required:
+        - type
+        - subtype
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum:
+            - em
+        subtype:
+          type: string
+          enum:
+            - helical
+            - single
+            - subtomogram
+            - tomography
+          description: The subtype for this EM experiment.
+        coordinates:
+          type: boolean
+          default: true
+          description: Whether coordinate files are included in this deposition.
+        related_emdb:
+          type: string
+          description: The EMDB ID for an associated map previously deposited.
+    EC:
+      type: object
+      description: Specifies an electron crystallography (EC) experiment.
+      required:
+        - type
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum:
+            - ec
+        coordinates:
+          type: boolean
+          default: true
+          description: Whether coordinate files are included in this deposition.
+        sf_only:
+          type: boolean
+          default: false
+          description: Whether only structure factor files are provided (no coordinates).
+        related_emdb:
+          type: string
+          description: The EMDB ID for an associated map previously deposited.
+    NMR:
+      type: object
+      description: Specifies a solution NMR experiment.
+      required:
+        - type
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum:
+            - nmr
+        coordinates:
+          type: boolean
+          default: true
+          description: Whether coordinate files are included in this deposition.
+        related_bmrb:
+          type: string
+          description: The BMRB ID of a previous entry containing NMR data for this
+            deposition.
+    SolidStateNMR:
+      type: object
+      description: Specifies a solid-state NMR experiment.
+      required:
+        - type
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum:
+            - ssnmr
+        coordinates:
+          type: boolean
+          default: true
+          description: Whether coordinate files are included in this deposition.
+        related_bmrb:
+          type: string
+          description: The BMRB ID of a previous entry containing NMR data for this
+            deposition.
+    ExperimentTypeBase:
+      description: An experiment type. Exactly one of the supported experiment schemas
+        must be provided.
+      oneOf:
+        - $ref: "#/components/schemas/XRay"
+        - $ref: "#/components/schemas/Fiber"
+        - $ref: "#/components/schemas/Neutron"
+        - $ref: "#/components/schemas/EM"
+        - $ref: "#/components/schemas/EC"
+        - $ref: "#/components/schemas/NMR"
+        - $ref: "#/components/schemas/SolidStateNMR"
+      discriminator:
+        propertyName: type
+        mapping:
+          xray: "#/components/schemas/XRay"
+          fiber: "#/components/schemas/Fiber"
+          neutron: "#/components/schemas/Neutron"
+          em: "#/components/schemas/EM"
+          ec: "#/components/schemas/EC"
+          nmr: "#/components/schemas/NMR"
+          ssnmr: "#/components/schemas/SolidStateNMR"
+    ExperimentTypeResponse:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          description: The experiment type.
+        subtype:
+          type: string
+          description: The experiment subtype. Only present when `type` is `em`.
+        coordinates:
+          type: boolean
+          description: Whether coordinate files are included in this deposition.
+        related_emdb:
+          type: string
+          description: The EMDB ID of an associated map. Only present when `type` is `em`
+            or `ec`.
+        related_bmrb:
+          type: string
+          description: The BMRB ID of an associated entry. Only present when `type` is
+            `nmr` or `ssnmr`.
+    DepositionBase:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          description: Main email address associated with this deposition.
+    DepositionStatusCode:
+      type: string
+      description: Status code representing the current state of the deposition.
+      enum:
+        - auco
+        - auth
+        - auxs
+        - auxu
+        - dep
+        - hold
+        - hpub
+        - obs
+        - polc
+        - proc
+        - rel
+        - repl
+        - reup
+        - wait
+        - wdrn
+    DepositionResponse:
+      allOf:
+        - $ref: "#/components/schemas/DepositionBase"
+        - type: object
+          required:
+            - id
+            - pdb_id
+            - emdb_id
+            - bmrb_id
+            - title
+            - hold_exp_date
+            - created
+            - last_login
+            - site
+            - site_url
+            - status
+          properties:
+            id:
+              type: string
+              description: Deposition identifier.
+            pdb_id:
+              type: string
+              description: PDB accession code.
+            emdb_id:
+              type: string
+              description: EMDB accession code.
+            bmrb_id:
+              type: string
+              description: BMRB accession code.
+            title:
+              type: string
+              description: Title of the associated publication.
+            hold_exp_date:
+              type: string
+              description: Hold expiration date.
+            created:
+              type: string
+              format: date-time
+              description: Date and time when this deposition was created.
+            last_login:
+              type: string
+              format: date-time
+              description: Date and time when this deposition was last accessed.
+            site:
+              type: string
+              description: >
+                Site responsible for this entry. Possible values: PDBe, PDBj,
+                RCSB, PDBc, PDBi.
+            site_url:
+              type: string
+              format: uri
+              description: URL for viewing this deposition.
+            status:
+              $ref: "#/components/schemas/DepositionStatusCode"
+            composite:
+              type: string
+              nullable: true
+              enum:
+                - Y
+                - N
+              description: >
+                Opt-in field, omitted unless requested via the `extra_fields`
+                query param (e.g. `?extra_fields=composite,em_type`). Whether
+                this EM deposition is a composite map (`Y` / `N`). Null for
+                non-EM depositions. Taken from
+                `entry_flags.COMPOSITE_DEPOSITION_TYPE`.
+            em_type:
+              type: string
+              nullable: true
+              enum:
+                - map only
+                - map + model
+                - model only
+              description: >
+                Opt-in field, omitted unless requested via the `extra_fields`
+                query param (e.g. `?extra_fields=composite,em_type`). EM map vs
+                model shape. Prefers assigned PDB/EMDB IDs, then brain-page
+                requested codes. Null for non-EM/EC depositions.
+            experiments:
+              type: array
+              items:
+                $ref: "#/components/schemas/ExperimentTypeResponse"
+              description: Experiment types associated with this deposition.
+            errors:
+              type: array
+              items:
+                $ref: "#/components/schemas/Error"
+              description: Any errors present in the deposition.
+    DepositionListResponse:
+      type: object
+      required:
+        - total
+        - items
+      properties:
+        total:
+          type: integer
+          description: Total number of depositions associated with the authenticated user.
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DepositionResponse"
+          description: Page of depositions.
+    ProcessDeposition:
+      type: object
+      properties:
+        related:
+          type: object
+          description: Provides a way to copy data from a previously deposited entry.
+          required:
+            - id
+            - items
+          properties:
+            id:
+              type: string
+              description: >
+                The identifier of the related deposition. The authenticated user
+                must have access to this deposition.
+            items:
+              type: array
+              items:
+                type: string
+                enum:
+                  - contact
+                  - title
+                  - citation
+                  - grant
+                  - em_exp
+              description: The fields to copy from the related deposition. Multiple values are
+                allowed.
+    ProcessingStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          description: The current status of the processing (e.g. `started`, `running`,
+            `completed`).
+        action:
+          type: string
+          description: The action being processed.
+        step:
+          type: string
+          description: The current step of the action being processed.
+        details:
+          type: string
+          description: A message describing the current step.
+        date:
+          type: string
+          format: date-time
+          description: A timestamp for the current request.
+    DepositorBase:
+      type: object
+      description: >
+        Represents a depositor in the system. This schema is used for
+        access-related operations.
+      required:
+        - orcid
+      properties:
+        orcid:
+          type: string
+          description: The Open Researcher and Contributor ID (ORCID).
+    DepositorResponse:
+      allOf:
+        - $ref: "#/components/schemas/DepositorBase"
+        - type: object
+          required:
+            - id
+            - full_name
+          properties:
+            id:
+              type: integer
+              description: A numeric identifier for this depositor.
+            full_name:
+              type: string
+              description: The depositor's full name, if public on their ORCID record.
+    DepositorEmailUpdate:
+      type: object
+      description: Fields to update on a depositor account.
+      properties:
+        email:
+          type: string
+          format: email
+          description: The depositor's email address.
+        verified:
+          type: boolean
+          description: Whether the depositor's account has been verified.
+    FileType:
+      type: string
+      description: The allowed file types for deposition uploads.
+      enum:
+        - add-map
+        - alignment-mask-map
+        - co-cif
+        - co-pdb
+        - fsc-half-map-mask
+        - fsc-map-model-mask
+        - fsc-xml
+        - focus-refinement-additional-map
+        - focused-refinement-mask-map
+        - half-map
+        - img-emdb
+        - layer-lines
+        - map-model-fsc
+        - mask-map
+        - md-cif
+        - nm-aux-amb
+        - nm-aux-cha
+        - nm-aux-gro
+        - nm-pea-any
+        - nm-res-amb
+        - nm-res-ari
+        - nm-res-bio
+        - nm-res-cha
+        - nm-res-cns
+        - nm-res-cya
+        - nm-res-dyn
+        - nm-res-gro
+        - nm-res-isd
+        - nm-res-oth
+        - nm-res-ros
+        - nm-res-sch
+        - nm-res-syb
+        - nm-res-xpl
+        - nm-shi
+        - nm-uni-nef
+        - nm-uni-str
+        - raw-map
+        - segmentation-map
+        - 3d-classification-additional-map
+        - vo-map
+        - xa-mat
+        - xa-par
+        - xa-top
+        - xs-cif
+        - xs-mtz
+    EMMapMetadata:
+      type: object
+      properties:
+        voxel:
+          type: object
+          description: Describes contour levels and pixel spacing for EM entries.
+          required:
+            - spacing
+            - contour
+          properties:
+            spacing:
+              type: object
+              description: The pixel spacing value, in angstroms.
+              required:
+                - x
+                - y
+                - z
+              properties:
+                x:
+                  type: number
+                y:
+                  type: number
+                z:
+                  type: number
+            contour:
+              type: number
+              description: The contour level.
+        description:
+          type: string
+          description: Short description of this file.
+    FileResponse:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - created
+      properties:
+        id:
+          type: integer
+          description: >
+            The identifier for this file. Used to reference this file in
+            subsequent operations.
+        name:
+          type: string
+          description: The file name.
+        type:
+          $ref: "#/components/schemas/FileType"
+        created:
+          type: string
+          description: Timestamp of when the file was uploaded.
+        metadata:
+          $ref: "#/components/schemas/EMMapMetadata"
+    FileListResponse:
+      type: object
+      required:
+        - files
+        - errors
+        - warnings
+      properties:
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileResponse"
+          description: Files uploaded to the deposition.
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/Error"
+          description: Errors that must be addressed before the deposition can be processed.
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Error"
+          description: Warnings that should be addressed before the deposition is processed.
+    FileUploadResponse:
+      allOf:
+        - $ref: "#/components/schemas/FileResponse"
+        - type: object
+          required:
+            - errors
+            - warnings
+          properties:
+            errors:
+              type: array
+              items:
+                $ref: "#/components/schemas/Error"
+              description: Errors that must be addressed before the deposition can be
+                processed.
+            warnings:
+              type: array
+              items:
+                $ref: "#/components/schemas/Error"
+              description: Warnings that should be addressed before the deposition is
+                processed.
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: A machine-readable error code.
+        message:
+          type: string
+          description: A human-readable error message.
+        extras:
+          type: object
+          description: Additional details about the error.

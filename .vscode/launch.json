@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Depositor",
+            "type": "go",
+            "request": "launch",
+            "mode": "exec",
+            "program": "${workspaceFolder}/cmd/openem-depositor-service/build/bin/openem-depositor-service",
+            "preLaunchTask": "build service",
+            "cwd": "${workspaceFolder}/cmd/openem-depositor-service/build/bin",
+            "env": {
+                "PORT": "8888",
+                "ALLOW_ORIGINS": "http://localhost",
+                "ONEDEP_BASE_AUTH_URL": "https://onedep-depui-test.wwpdb.org/deposition/"
+            },
+            "console": "integratedTerminal"
+        }
+    ]
+}

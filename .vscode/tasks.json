@@ -1,0 +1,60 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build depositor service",
+      "type": "shell",
+      "options": {
+        "cwd": "${workspaceFolder}/cmd/openem-depositor-service"
+      },
+      "command": "go",
+      "args": [
+        "build",
+        "-tags",
+        "dev",
+        "-gcflags",
+        "all=-N -l",
+        "-o",
+        "build/bin/openem-depositor-service"
+      ]
+    },
+    {
+      "label": "copy data",
+      "type": "shell",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "command": "cp",
+      "args": [
+        "-r",
+        "data",
+        "cmd/openem-depositor-service/build/bin"
+      ]
+    },
+    {
+      "label": "go generate",
+      "type": "shell",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "command": "go",
+      "args": [
+        "generate",
+        "./..."
+      ]
+    },
+    {
+      "label": "build service",
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "copy data",
+        "go generate",
+        "build depositor service",
+      ]
+    },
+  ]
+}

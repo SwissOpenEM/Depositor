@@ -1,11 +1,4 @@
 {
-    "cSpell.words": [
-        "bmrb",
-        "Dreq",
-        "emdb",
-        "Mreq",
-        "onedep",
-        "orcid",
-        "subtomogram"
-    ]
+  "go.lintOnSave": "workspace",
+  "go.lintTool": "golangci-lint",
 }

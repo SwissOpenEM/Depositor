@@ -1,0 +1,662 @@
+openapi: 3.0.3
+info:
+  description: Rest API for communication between SciCat frontend and depositor
+    backend. Backend service enables deposition of datasets to OneDep API.
+  title: OpenEm Depositor API
+  version: 1.0.0
+tags:
+  - name: onedeb
+    description: Operations related to onedep depositions
+  - name: empair
+    description: Operations related to empair depositions
+  - name: other
+    description: Further operations for general information
+
+paths:
+  /empiar/metadata:
+    post:
+      tags:
+        - empiar
+      summary: Add file, pixel spacing, contour level and description to deposition in
+        OneDep
+      description: NA
+      operationId: EmpairController_createMetadataJSON
+      requestBody:
+        $ref: "#/components/requestBodies/Scientificmetadata"
+      responses:
+        "200":
+          description: json file with metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/empiar.Imageset"
+        "400":
+          description: Error response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+  /empiar/schema:
+    get:
+      tags:
+        - empiar
+      description: NA
+      summary: Retrieve the current schema for EMPIAR depositions
+      operationId: EmpairController_getSchema
+      responses:
+        "200":
+          description: base64 encoded schema
+          content:
+            application/json:
+              schema:
+                type: string
+        "400":
+          description: Error response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+
+  /onedep:
+    post:
+      tags:
+        - onedep
+      summary: Create a new deposition to OneDep
+      description: Create a new deposition by uploading experiment and user details to
+        OneDep API.
+      operationId: OneDepController_CreateNewDeposition        
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestCreate"
+        description: User information
+        required: true
+      responses:
+        "201":
+          description: Success response with Deposition ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositionResponse"
+        "400":
+          description: Error response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+  "/onedep/{depID}/file":
+    post:
+      tags:
+        - onedep
+      description: Uploading file, and metadata to OneDep API.
+      summary: Add file, pixel spacing, contour level and description to deposition in
+        OneDep
+      operationId: OneDepController_UploadFile  
+      parameters:
+        - description: Deposition ID to which a file should be uploaded
+          in: path
+          name: depID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  description: File to upload
+                  type: string
+                  format: binary
+                fileMetadata:
+                  description: File metadata as a JSON string
+                  type: string
+                jwtToken:
+                  description: JWT token for OneDep API
+                  type: string
+              required:
+                - file
+                - fileMetadata
+                - jwtToken
+        required: true
+      responses:
+        "200":
+          description: File ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResponse"
+        "400":
+          description: Error response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType" 
+  "/onedep/{depID}/metadata":
+    post:
+      tags:
+        - onedep
+      summary: Add a cif file with metadata to deposition in OneDep
+      description: Uploading metadata file to OneDep API. This is created by parsing
+        the JSON metadata into the converter.
+      operationId: OneDepController_UploadMetadata
+      parameters:
+        - description: Deposition ID to which a file should be uploaded
+          in: path
+          name: depID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                jwtToken:
+                  description: JWT token for OneDep API
+                  type: string
+                scientificMetadata:
+                  description: Scientific metadata as a JSON string; expects elements from OSCEM
+                    on the top level
+                  type: string
+              required:
+                - jwtToken
+                - scientificMetadata
+        required: true
+      responses:
+        "200":
+          description: File ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResponse"
+        "400":
+          description: Error response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+  "/onedep/{depID}/pdb":
+    post:
+      tags:
+        - onedep
+      summary: Add coordinates and description to deposition in OneDep
+      description: Uploading file to OneDep API.
+      operationId: OneDepController_UploadPdb
+      parameters:
+        - description: Deposition ID to which a file should be uploaded
+          in: path
+          name: depID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                jwtToken:
+                  description: JWT token for OneDep API
+                  type: string
+                file:
+                  description: File to upload
+                  type: string
+                  format: binary
+                scientificMetadata:
+                  description: Scientific metadata as a JSON string; expects elements from OSCEM
+                    on the top level
+                  type: string
+              required:
+                - jwtToken
+                - file
+                - scientificMetadata
+        required: true
+      responses:
+        "200":
+          description: File ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResponse"
+        "400":
+          description: Error response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+  "/onedep/{depID}/process":
+    post:
+      tags:
+        - onedep
+      summary: Process deposition to OneDep
+      description: Process a deposition in OneDep API.
+      operationId: OneDepController_Process
+      parameters:
+        - description: Deposition ID to which a file should be uploaded
+          in: path
+          name: depID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                jwtToken:
+                  description: JWT token for OneDep API
+                  type: string
+              required:
+                - jwtToken
+        required: true
+      responses:
+        "200":
+          description: Deposition ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedDeposition"
+        "400":
+          description: Error response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+  /onedep/metadata:
+    post:
+      tags:
+        - onedep
+      summary: Get a cif file with metadata for manual deposition in OneDep
+      description: Downloading a metadata file. Invokes converter and starts download.
+      operationId: OneDepController_DownloadMetadata
+      requestBody:
+        $ref: "#/components/requestBodies/Scientificmetadata"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Error response
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+        "500":
+          description: Internal server error
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+
+  /onedep/pdb:
+    post:
+      tags:
+        - onedep
+      summary: Get a cif file with metadata and coordinates for manual deposition in OneDep
+      description: Downloading a metadata file. Invokes converter and starts download.
+      operationId: OneDepController_DownloadCif
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                scientificMetadata:
+                  description: Scientific metadata as a JSON string; expects elements from OSCEM
+                    on the top level
+                  type: string
+                file:
+                  description: File to upload
+                  type: string
+                  format: binary
+              required:
+                - scientificMetadata
+                - file
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Error response
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+        "500":
+          description: Internal server error
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ResponseType"
+
+  /version:
+    get:
+      description: Retrieve the current version of the Depositor
+      tags:
+        - other
+      operationId: OtherController_getVersion
+      responses:
+        "200":
+          description: Depositior version
+          content:
+            application/json:
+              schema:
+                type: string
+        "400":
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: string
+      summary: Return current version
+      
+components:
+  requestBodies:
+    Scientificmetadata:
+      content:
+        application/json:
+          schema:
+            type: object
+      description: Scientific metadata as a JSON string; expects elements from OSCEM
+        on the top level
+      required: true
+  schemas:
+    empiar.Imageset:
+      properties:
+        category:
+          type: string
+        data_format:
+          type: string
+        details:
+          type: string
+        directory:
+          type: string
+        frames_per_image:
+          type: integer
+        header_format:
+          type: string
+        image_height:
+          type: integer
+        image_width:
+          type: integer
+        micrographs_file_pattern:
+          type: string
+        name:
+          type: string
+        num_images_or_tilt_series:
+          type: integer
+        picked_particles_directory:
+          type: string
+        picked_particles_file_pattern:
+          type: string
+        pixel_height:
+          type: number
+        pixel_width:
+          type: number
+        voxel_type:
+          type: string
+      type: object
+    CreatedDeposition:
+      properties:
+        depID:
+          type: string
+      type: object
+    DepositionResponse:
+      properties:
+        bmrb_id:
+          type: string
+        code:
+          type: string
+        created:
+          type: string
+        email:
+          type: string
+        emdb_id:
+          type: string
+        errors:
+          $ref: "#/components/schemas/OneDepError"
+        experiments:
+          description: FIX ME actual response type does not correspond to the documented.
+        hold_exp_date:
+          type: string
+        id:
+          type: string
+        last_login:
+          type: string
+        message:
+          type: string
+        pdb_id:
+          type: string
+        site:
+          type: string
+        site_url:
+          type: string
+        status:
+          $ref: "#/components/schemas/Status"
+        title:
+          type: string
+      type: object
+    FileResponse:
+      properties:
+        created:
+          type: string
+        errors:
+          description: FIX ME actual response type does not correspond to the documented.
+        id:
+          type: integer
+        metadata:
+          additionalProperties: {}
+          description: not there
+          type: object
+        name:
+          description: not there
+          type: string
+        type:
+          $ref: "#/components/schemas/OneDepType"
+        warnings:
+          description: FIX ME actual response type does not correspond to the documented.
+      type: object
+    OneDepError:
+      properties:
+        code:
+          type: string
+        extras:
+          additionalProperties:
+            items: {}
+            type: array
+          type: object
+        message:
+          type: string
+      type: object
+    OneDepType:
+      enum:
+        - add-map
+        - co-cif
+        - md-cif
+        - co-pdb
+        - fsc-xml
+        - half-map
+        - img-emdb
+        - layer-lines
+        - mask-map
+        - nm-aux-amb
+        - nm-aux-gro
+        - nm-pea-any
+        - nm-res-amb
+        - nm-res-bio
+        - nm-res-cha
+        - nm-res-cns
+        - nm-res-cya
+        - nm-res-dyn
+        - nm-res-gro
+        - nm-res-isd
+        - nm-res-oth
+        - nm-res-ros
+        - nm-res-syb
+        - nm-res-xpl
+        - nm-shi
+        - nm-uni-nef
+        - nm-uni-str
+        - vo-map
+        - xa-mat
+        - xa-par
+        - xa-top
+        - xs-cif
+        - xs-mtz
+      type: string
+      x-enum-varnames:
+        - ADD_MAP
+        - CO_CIF
+        - MD_CIF
+        - CO_PDB
+        - FSC_XML
+        - HALF_MAP
+        - IMG_EMDB
+        - LAYER_LINES
+        - MASK_MAP
+        - NM_AUX_AMB
+        - NM_AUX_GRO
+        - NM_PEA_ANY
+        - NM_RES_AMB
+        - NM_RES_BIO
+        - NM_RES_CHA
+        - NM_RES_CNS
+        - NM_RES_CYA
+        - NM_RES_DYN
+        - NM_RES_GRO
+        - NM_RES_ISD
+        - NM_RES_OTH
+        - NM_RES_ROS
+        - NM_RES_SYB
+        - NM_RES_XPL
+        - NM_SHI
+        - NM_UNI_NEF
+        - NM_UNI_STR
+        - VO_MAP
+        - XA_MAT
+        - XA_PAR
+        - XA_TOP
+        - XS_CIF
+        - XS_MTZ
+    RequestCreate:
+      properties:
+        coordinates:
+          type: boolean
+        country:
+          type: string
+        email:
+          type: string
+        jwtToken:
+          type: string
+        method:
+          type: string
+        orcidIds:
+          items:
+            type: string
+          type: array
+        password:
+          type: string
+      required:
+        - country
+        - email
+        - jwtToken
+        - method
+        - orcidIds
+      type: object
+    ResponseType:
+      properties:
+        message:
+          type: string
+        status:
+          type: string
+      type: object
+    Status:
+      enum:
+        - auco
+        - auth
+        - auxs
+        - auxu
+        - dep
+        - hold
+        - hpub
+        - obs
+        - polc
+        - proc
+        - rel
+        - repl
+        - reup
+        - wait
+        - wdrn
+      type: string
+      x-enum-varnames:
+        - AUCO
+        - AUTH
+        - AUXS
+        - AUXU
+        - DEP
+        - HOLD
+        - HPUB
+        - OBS
+        - POLC
+        - PROC
+        - REL
+        - REPL
+        - REUP
+        - WAIT
+        - WDRN
