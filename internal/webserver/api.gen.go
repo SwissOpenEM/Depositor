@@ -267,31 +267,11 @@ type ResponseType struct {
 // Status defines model for Status.
 type Status string
 
-// EmpiarImageset defines model for empiar.Imageset.
-type EmpiarImageset struct {
-	Category                   *string  `json:"category,omitempty"`
-	DataFormat                 *string  `json:"data_format,omitempty"`
-	Details                    *string  `json:"details,omitempty"`
-	Directory                  *string  `json:"directory,omitempty"`
-	FramesPerImage             *int     `json:"frames_per_image,omitempty"`
-	HeaderFormat               *string  `json:"header_format,omitempty"`
-	ImageHeight                *int     `json:"image_height,omitempty"`
-	ImageWidth                 *int     `json:"image_width,omitempty"`
-	MicrographsFilePattern     *string  `json:"micrographs_file_pattern,omitempty"`
-	Name                       *string  `json:"name,omitempty"`
-	NumImagesOrTiltSeries      *int     `json:"num_images_or_tilt_series,omitempty"`
-	PickedParticlesDirectory   *string  `json:"picked_particles_directory,omitempty"`
-	PickedParticlesFilePattern *string  `json:"picked_particles_file_pattern,omitempty"`
-	PixelHeight                *float32 `json:"pixel_height,omitempty"`
-	PixelWidth                 *float32 `json:"pixel_width,omitempty"`
-	VoxelType                  *string  `json:"voxel_type,omitempty"`
-}
-
 // Scientificmetadata defines model for Scientificmetadata.
 type Scientificmetadata = map[string]interface{}
 
-// EmpairControllerCreateMetadataJSONJSONBody defines parameters for EmpairControllerCreateMetadataJSON.
-type EmpairControllerCreateMetadataJSONJSONBody = map[string]interface{}
+// EmpiarControllerCreateMetadataJSONJSONBody defines parameters for EmpiarControllerCreateMetadataJSON.
+type EmpiarControllerCreateMetadataJSONJSONBody = map[string]interface{}
 
 // OneDepControllerDownloadMetadataJSONBody defines parameters for OneDepControllerDownloadMetadata.
 type OneDepControllerDownloadMetadataJSONBody = map[string]interface{}
@@ -344,8 +324,8 @@ type OneDepControllerProcessFormdataBody struct {
 	JwtToken string `form:"jwtToken" json:"jwtToken"`
 }
 
-// EmpairControllerCreateMetadataJSONJSONRequestBody defines body for EmpairControllerCreateMetadataJSON for application/json ContentType.
-type EmpairControllerCreateMetadataJSONJSONRequestBody = EmpairControllerCreateMetadataJSONJSONBody
+// EmpiarControllerCreateMetadataJSONJSONRequestBody defines body for EmpiarControllerCreateMetadataJSON for application/json ContentType.
+type EmpiarControllerCreateMetadataJSONJSONRequestBody = EmpiarControllerCreateMetadataJSONJSONBody
 
 // OneDepControllerCreateNewDepositionJSONRequestBody defines body for OneDepControllerCreateNewDeposition for application/json ContentType.
 type OneDepControllerCreateNewDepositionJSONRequestBody = RequestCreate
@@ -370,12 +350,12 @@ type OneDepControllerProcessFormdataRequestBody OneDepControllerProcessFormdataB
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// EmpairControllerCreateMetadataJSON Add file, pixel spacing, contour level and description to deposition in OneDep
+	// EmpiarControllerCreateMetadataJSON Add file, pixel spacing, contour level and description to deposition in OneDep
 	// (POST /empiar/metadata)
-	EmpairControllerCreateMetadataJSON(c *gin.Context)
-	// EmpairControllerGetSchema Retrieve the current schema for EMPIAR depositions
+	EmpiarControllerCreateMetadataJSON(c *gin.Context)
+	// EmpiarControllerGetSchema Retrieve the current schema for EMPIAR depositions
 	// (GET /empiar/schema)
-	EmpairControllerGetSchema(c *gin.Context)
+	EmpiarControllerGetSchema(c *gin.Context)
 	// OneDepControllerCreateNewDeposition Create a new deposition to OneDep
 	// (POST /onedep)
 	OneDepControllerCreateNewDeposition(c *gin.Context)
@@ -411,8 +391,8 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(c *gin.Context)
 
-// EmpairControllerCreateMetadataJSON operation middleware
-func (siw *ServerInterfaceWrapper) EmpairControllerCreateMetadataJSON(c *gin.Context) {
+// EmpiarControllerCreateMetadataJSON operation middleware
+func (siw *ServerInterfaceWrapper) EmpiarControllerCreateMetadataJSON(c *gin.Context) {
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -421,11 +401,11 @@ func (siw *ServerInterfaceWrapper) EmpairControllerCreateMetadataJSON(c *gin.Con
 		}
 	}
 
-	siw.Handler.EmpairControllerCreateMetadataJSON(c)
+	siw.Handler.EmpiarControllerCreateMetadataJSON(c)
 }
 
-// EmpairControllerGetSchema operation middleware
-func (siw *ServerInterfaceWrapper) EmpairControllerGetSchema(c *gin.Context) {
+// EmpiarControllerGetSchema operation middleware
+func (siw *ServerInterfaceWrapper) EmpiarControllerGetSchema(c *gin.Context) {
 
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
@@ -434,7 +414,7 @@ func (siw *ServerInterfaceWrapper) EmpairControllerGetSchema(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.EmpairControllerGetSchema(c)
+	siw.Handler.EmpiarControllerGetSchema(c)
 }
 
 // OneDepControllerCreateNewDeposition operation middleware
@@ -616,8 +596,8 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 		ErrorHandler:       errorHandler,
 	}
 
-	router.POST(options.BaseURL+"/empiar/metadata", wrapper.EmpairControllerCreateMetadataJSON)
-	router.GET(options.BaseURL+"/empiar/schema", wrapper.EmpairControllerGetSchema)
+	router.POST(options.BaseURL+"/empiar/metadata", wrapper.EmpiarControllerCreateMetadataJSON)
+	router.GET(options.BaseURL+"/empiar/schema", wrapper.EmpiarControllerGetSchema)
 	router.POST(options.BaseURL+"/onedep", wrapper.OneDepControllerCreateNewDeposition)
 	router.POST(options.BaseURL+"/onedep/:depID/file", wrapper.OneDepControllerUploadFile)
 	router.POST(options.BaseURL+"/onedep/:depID/metadata", wrapper.OneDepControllerUploadMetadata)
@@ -628,31 +608,45 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/version", wrapper.OtherControllerGetVersion)
 }
 
-type EmpairControllerCreateMetadataJSONRequestObject struct {
-	Body *EmpairControllerCreateMetadataJSONJSONRequestBody
+type EmpiarControllerCreateMetadataJSONRequestObject struct {
+	Body *EmpiarControllerCreateMetadataJSONJSONRequestBody
 }
 
-type EmpairControllerCreateMetadataJSONResponseObject interface {
-	VisitEmpairControllerCreateMetadataJSONResponse(w http.ResponseWriter) error
+type EmpiarControllerCreateMetadataJSONResponseObject interface {
+	VisitEmpiarControllerCreateMetadataJSONResponse(w http.ResponseWriter) error
 }
 
-type EmpairControllerCreateMetadataJSON200JSONResponse EmpiarImageset
+type EmpiarControllerCreateMetadataJSON200ResponseHeaders struct {
+	ContentDisposition *string
+}
 
-func (response EmpairControllerCreateMetadataJSON200JSONResponse) VisitEmpairControllerCreateMetadataJSONResponse(w http.ResponseWriter) error {
+type EmpiarControllerCreateMetadataJSON200ApplicationoctetStreamResponse struct {
+	Body          io.Reader
+	Headers       EmpiarControllerCreateMetadataJSON200ResponseHeaders
+	ContentLength int64
+}
 
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
+func (response EmpiarControllerCreateMetadataJSON200ApplicationoctetStreamResponse) VisitEmpiarControllerCreateMetadataJSONResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
 	}
-	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ContentDisposition != nil {
+		w.Header().Set("Content-Disposition", fmt.Sprint(*response.Headers.ContentDisposition))
+	}
 	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
 	return err
 }
 
-type EmpairControllerCreateMetadataJSON400JSONResponse ResponseType
+type EmpiarControllerCreateMetadataJSON400JSONResponse ResponseType
 
-func (response EmpairControllerCreateMetadataJSON400JSONResponse) VisitEmpairControllerCreateMetadataJSONResponse(w http.ResponseWriter) error {
+func (response EmpiarControllerCreateMetadataJSON400JSONResponse) VisitEmpiarControllerCreateMetadataJSONResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -664,9 +658,9 @@ func (response EmpairControllerCreateMetadataJSON400JSONResponse) VisitEmpairCon
 	return err
 }
 
-type EmpairControllerCreateMetadataJSON500JSONResponse ResponseType
+type EmpiarControllerCreateMetadataJSON500JSONResponse ResponseType
 
-func (response EmpairControllerCreateMetadataJSON500JSONResponse) VisitEmpairControllerCreateMetadataJSONResponse(w http.ResponseWriter) error {
+func (response EmpiarControllerCreateMetadataJSON500JSONResponse) VisitEmpiarControllerCreateMetadataJSONResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -678,16 +672,16 @@ func (response EmpairControllerCreateMetadataJSON500JSONResponse) VisitEmpairCon
 	return err
 }
 
-type EmpairControllerGetSchemaRequestObject struct {
+type EmpiarControllerGetSchemaRequestObject struct {
 }
 
-type EmpairControllerGetSchemaResponseObject interface {
-	VisitEmpairControllerGetSchemaResponse(w http.ResponseWriter) error
+type EmpiarControllerGetSchemaResponseObject interface {
+	VisitEmpiarControllerGetSchemaResponse(w http.ResponseWriter) error
 }
 
-type EmpairControllerGetSchema200JSONResponse string
+type EmpiarControllerGetSchema200JSONResponse string
 
-func (response EmpairControllerGetSchema200JSONResponse) VisitEmpairControllerGetSchemaResponse(w http.ResponseWriter) error {
+func (response EmpiarControllerGetSchema200JSONResponse) VisitEmpiarControllerGetSchemaResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -699,9 +693,9 @@ func (response EmpairControllerGetSchema200JSONResponse) VisitEmpairControllerGe
 	return err
 }
 
-type EmpairControllerGetSchema400JSONResponse ResponseType
+type EmpiarControllerGetSchema400JSONResponse ResponseType
 
-func (response EmpairControllerGetSchema400JSONResponse) VisitEmpairControllerGetSchemaResponse(w http.ResponseWriter) error {
+func (response EmpiarControllerGetSchema400JSONResponse) VisitEmpiarControllerGetSchemaResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -713,9 +707,9 @@ func (response EmpairControllerGetSchema400JSONResponse) VisitEmpairControllerGe
 	return err
 }
 
-type EmpairControllerGetSchema500JSONResponse ResponseType
+type EmpiarControllerGetSchema500JSONResponse ResponseType
 
-func (response EmpairControllerGetSchema500JSONResponse) VisitEmpairControllerGetSchemaResponse(w http.ResponseWriter) error {
+func (response EmpiarControllerGetSchema500JSONResponse) VisitEmpiarControllerGetSchemaResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1154,12 +1148,12 @@ func (response OtherControllerGetVersion400JSONResponse) VisitOtherControllerGet
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// EmpairControllerCreateMetadataJSON Add file, pixel spacing, contour level and description to deposition in OneDep
+	// EmpiarControllerCreateMetadataJSON Add file, pixel spacing, contour level and description to deposition in OneDep
 	// (POST /empiar/metadata)
-	EmpairControllerCreateMetadataJSON(ctx context.Context, request EmpairControllerCreateMetadataJSONRequestObject) (EmpairControllerCreateMetadataJSONResponseObject, error)
-	// EmpairControllerGetSchema Retrieve the current schema for EMPIAR depositions
+	EmpiarControllerCreateMetadataJSON(ctx context.Context, request EmpiarControllerCreateMetadataJSONRequestObject) (EmpiarControllerCreateMetadataJSONResponseObject, error)
+	// EmpiarControllerGetSchema Retrieve the current schema for EMPIAR depositions
 	// (GET /empiar/schema)
-	EmpairControllerGetSchema(ctx context.Context, request EmpairControllerGetSchemaRequestObject) (EmpairControllerGetSchemaResponseObject, error)
+	EmpiarControllerGetSchema(ctx context.Context, request EmpiarControllerGetSchemaRequestObject) (EmpiarControllerGetSchemaResponseObject, error)
 	// OneDepControllerCreateNewDeposition Create a new deposition to OneDep
 	// (POST /onedep)
 	OneDepControllerCreateNewDeposition(ctx context.Context, request OneDepControllerCreateNewDepositionRequestObject) (OneDepControllerCreateNewDepositionResponseObject, error)
@@ -1243,11 +1237,11 @@ type strictHandler struct {
 	options     StrictGinServerOptions
 }
 
-// EmpairControllerCreateMetadataJSON operation middleware
-func (sh *strictHandler) EmpairControllerCreateMetadataJSON(ctx *gin.Context) {
-	var request EmpairControllerCreateMetadataJSONRequestObject
+// EmpiarControllerCreateMetadataJSON operation middleware
+func (sh *strictHandler) EmpiarControllerCreateMetadataJSON(ctx *gin.Context) {
+	var request EmpiarControllerCreateMetadataJSONRequestObject
 
-	var body EmpairControllerCreateMetadataJSONJSONRequestBody
+	var body EmpiarControllerCreateMetadataJSONJSONRequestBody
 	if err := ctx.ShouldBindJSON(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(ctx, err)
 		return
@@ -1255,18 +1249,18 @@ func (sh *strictHandler) EmpairControllerCreateMetadataJSON(ctx *gin.Context) {
 	request.Body = &body
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.EmpairControllerCreateMetadataJSON(ctx, request.(EmpairControllerCreateMetadataJSONRequestObject))
+		return sh.ssi.EmpiarControllerCreateMetadataJSON(ctx, request.(EmpiarControllerCreateMetadataJSONRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "EmpairControllerCreateMetadataJSON")
+		handler = middleware(handler, "EmpiarControllerCreateMetadataJSON")
 	}
 
 	response, err := handler(ctx, request)
 
 	if err != nil {
 		sh.options.HandlerErrorFunc(ctx, err)
-	} else if validResponse, ok := response.(EmpairControllerCreateMetadataJSONResponseObject); ok {
-		if err := validResponse.VisitEmpairControllerCreateMetadataJSONResponse(ctx.Writer); err != nil {
+	} else if validResponse, ok := response.(EmpiarControllerCreateMetadataJSONResponseObject); ok {
+		if err := validResponse.VisitEmpiarControllerCreateMetadataJSONResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {
@@ -1274,23 +1268,23 @@ func (sh *strictHandler) EmpairControllerCreateMetadataJSON(ctx *gin.Context) {
 	}
 }
 
-// EmpairControllerGetSchema operation middleware
-func (sh *strictHandler) EmpairControllerGetSchema(ctx *gin.Context) {
-	var request EmpairControllerGetSchemaRequestObject
+// EmpiarControllerGetSchema operation middleware
+func (sh *strictHandler) EmpiarControllerGetSchema(ctx *gin.Context) {
+	var request EmpiarControllerGetSchemaRequestObject
 
 	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.EmpairControllerGetSchema(ctx, request.(EmpairControllerGetSchemaRequestObject))
+		return sh.ssi.EmpiarControllerGetSchema(ctx, request.(EmpiarControllerGetSchemaRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "EmpairControllerGetSchema")
+		handler = middleware(handler, "EmpiarControllerGetSchema")
 	}
 
 	response, err := handler(ctx, request)
 
 	if err != nil {
 		sh.options.HandlerErrorFunc(ctx, err)
-	} else if validResponse, ok := response.(EmpairControllerGetSchemaResponseObject); ok {
-		if err := validResponse.VisitEmpairControllerGetSchemaResponse(ctx.Writer); err != nil {
+	} else if validResponse, ok := response.(EmpiarControllerGetSchemaResponseObject); ok {
+		if err := validResponse.VisitEmpiarControllerGetSchemaResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {
@@ -1556,46 +1550,44 @@ func (sh *strictHandler) OtherControllerGetVersion(ctx *gin.Context) {
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"lx/s0/3T/wcA",
+	"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",
+	"PAv3KUi8d8O5tcsNdnO7+e8A",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

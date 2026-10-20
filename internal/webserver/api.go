@@ -10,15 +10,17 @@ import (
 )
 
 var _ StrictServerInterface = (*DepositorWebServerImplemenation)(nil)
+var version string
 
 type DepositorWebServerImplemenation struct {
 }
 
-func NewDepositorWebServer(version string, config *core.Config) (*DepositorWebServerImplemenation, error) {
+func NewDepositorWebServer(vers string, config *core.Config) (*DepositorWebServerImplemenation, error) {
+	version = vers
 	return &DepositorWebServerImplemenation{}, nil
 }
 
 // OtherControllerGetVersion implements [StrictServerInterface].
 func (i *DepositorWebServerImplemenation) OtherControllerGetVersion(ctx context.Context, request OtherControllerGetVersionRequestObject) (OtherControllerGetVersionResponseObject, error) {
-	panic("unimplemented")
+	return OtherControllerGetVersion200JSONResponse(version), nil
 }

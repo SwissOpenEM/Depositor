@@ -8,7 +8,7 @@ tags:
   - name: onedep
     description: Operations related to onedep depositions
   - name: empiar
-    description: Operations related to empair depositions
+    description: Operations related to Empiar depositions
   - name: other
     description: Further operations for general information
 
@@ -20,16 +20,22 @@ paths:
       summary: Add file, pixel spacing, contour level and description to deposition in
         OneDep
       description: NA
-      operationId: EmpairController_createMetadataJSON
+      operationId: EmpiarController_createMetadataJSON
       requestBody:
         $ref: "#/components/requestBodies/Scientificmetadata"
       responses:
         "200":
-          description: json file with metadata
-          content:
-            application/json:
+          description: Generated CIF file
+          headers:
+            Content-Disposition:
+              description: Attachment filename
               schema:
-                $ref: "#/components/schemas/empiar.Imageset"
+                type: string
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
         "400":
           description: Error response
           content:
@@ -48,7 +54,7 @@ paths:
         - empiar
       description: NA
       summary: Retrieve the current schema for EMPIAR depositions
-      operationId: EmpairController_getSchema
+      operationId: EmpiarController_getSchema
       responses:
         "200":
           description: base64 encoded schema
@@ -417,41 +423,6 @@ components:
         on the top level
       required: true
   schemas:
-    empiar.Imageset:
-      properties:
-        category:
-          type: string
-        data_format:
-          type: string
-        details:
-          type: string
-        directory:
-          type: string
-        frames_per_image:
-          type: integer
-        header_format:
-          type: string
-        image_height:
-          type: integer
-        image_width:
-          type: integer
-        micrographs_file_pattern:
-          type: string
-        name:
-          type: string
-        num_images_or_tilt_series:
-          type: integer
-        picked_particles_directory:
-          type: string
-        picked_particles_file_pattern:
-          type: string
-        pixel_height:
-          type: number
-        pixel_width:
-          type: number
-        voxel_type:
-          type: string
-      type: object
     CreatedDeposition:
       properties:
         depID:

@@ -6,6 +6,7 @@ require (
 	github.com/getkin/kin-openapi v0.151.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/oapi-codegen/runtime v1.7.0
+	github.com/osc-em/converter-OSCEM-to-mmCIF v1.1.8
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
 )
@@ -30,6 +31,7 @@ require (
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.9.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
