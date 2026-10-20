@@ -5,9 +5,9 @@ info:
   title: OpenEm Depositor API
   version: 1.0.0
 tags:
-  - name: onedeb
+  - name: onedep
     description: Operations related to onedep depositions
-  - name: empair
+  - name: empiar
     description: Operations related to empair depositions
   - name: other
     description: Further operations for general information
