@@ -26,7 +26,7 @@ func TestNewDepositorWebServer(t *testing.T) {
 func TestOtherControllerGetVersion(t *testing.T) {
 	t.Parallel()
 
-	server := &DepositorWebServerImplemenation{Version: "test-version"}
+	server := &DepositorWebServerImplementation{Version: "test-version"}
 	response, err := server.OtherControllerGetVersion(
 		context.Background(),
 		OtherControllerGetVersionRequestObject{},

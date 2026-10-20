@@ -9,21 +9,21 @@ import (
 	"github.com/SwissOpenEM/Depositor/internal/core"
 )
 
-var _ StrictServerInterface = (*DepositorWebServerImplemenation)(nil)
+var _ StrictServerInterface = (*DepositorWebServerImplementation)(nil)
 
-type DepositorWebServerImplemenation struct {
+type DepositorWebServerImplementation struct {
 	DataDir string
 	Version string
 }
 
-func NewDepositorWebServer(version string, config *core.Config) (*DepositorWebServerImplemenation, error) {
-	return &DepositorWebServerImplemenation{
+func NewDepositorWebServer(version string, config *core.Config) (*DepositorWebServerImplementation, error) {
+	return &DepositorWebServerImplementation{
 		Version: version,
 		DataDir: config.DataDir,
 	}, nil
 }
 
 // OtherControllerGetVersion implements [StrictServerInterface].
-func (i *DepositorWebServerImplemenation) OtherControllerGetVersion(ctx context.Context, request OtherControllerGetVersionRequestObject) (OtherControllerGetVersionResponseObject, error) {
+func (i *DepositorWebServerImplementation) OtherControllerGetVersion(ctx context.Context, request OtherControllerGetVersionRequestObject) (OtherControllerGetVersionResponseObject, error) {
 	return OtherControllerGetVersion200JSONResponse(i.Version), nil
 }

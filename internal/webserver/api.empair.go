@@ -11,7 +11,7 @@ import (
 	parser "github.com/osc-em/converter-OSCEM-to-mmCIF/parser"
 )
 
-func (i *DepositorWebServerImplemenation) EmpiarControllerGetSchema(
+func (i *DepositorWebServerImplementation) EmpiarControllerGetSchema(
 	_ context.Context,
 	_ EmpiarControllerGetSchemaRequestObject,
 ) (EmpiarControllerGetSchemaResponseObject, error) {
@@ -32,7 +32,7 @@ func (i *DepositorWebServerImplemenation) EmpiarControllerGetSchema(
 }
 
 // EmpiarControllerCreateMetadataJSON implements [StrictServerInterface].
-func (i *DepositorWebServerImplemenation) EmpiarControllerCreateMetadataJSON(ctx context.Context, request EmpiarControllerCreateMetadataJSONRequestObject) (EmpiarControllerCreateMetadataJSONResponseObject, error) {
+func (i *DepositorWebServerImplementation) EmpiarControllerCreateMetadataJSON(ctx context.Context, request EmpiarControllerCreateMetadataJSONRequestObject) (EmpiarControllerCreateMetadataJSONResponseObject, error) {
 
 	if request.Body == nil || *request.Body == nil {
 		return getErrorResponse[EmpiarControllerCreateMetadataJSON400JSONResponse](

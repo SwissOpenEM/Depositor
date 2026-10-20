@@ -22,7 +22,7 @@ import (
 
 var swaggerYAML embed.FS
 
-func NewDepositorServer(config *core.Config, depositor *DepositorWebServerImplemenation) *http.Server {
+func NewDepositorServer(config *core.Config, depositor *DepositorWebServerImplementation) *http.Server {
 	swagger, err := GetSwagger()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading swagger spec\n: %s", err)

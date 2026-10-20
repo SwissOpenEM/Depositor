@@ -14,8 +14,8 @@ import (
 // repoDataDir points to the real data directory shipped with the repository.
 const repoDataDir = "../../data"
 
-func newTestServer(dataDir string) *DepositorWebServerImplemenation {
-	return &DepositorWebServerImplemenation{DataDir: dataDir}
+func newTestServer(dataDir string) *DepositorWebServerImplementation {
+	return &DepositorWebServerImplementation{DataDir: dataDir}
 }
 
 func writeFile(t *testing.T, dir, name, content string) {

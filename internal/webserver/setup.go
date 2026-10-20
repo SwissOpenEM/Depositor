@@ -14,7 +14,7 @@ func initAPIRuntime() {
 	runtime.NarrowUnionNumericFormats = true
 }
 
-func SetupAndRun(config *core.Config, version string) *DepositorWebServerImplemenation {
+func SetupAndRun(config *core.Config, version string) *DepositorWebServerImplementation {
 	initAPIRuntime()
 	depositor, err := NewDepositorWebServer(version, config)
 	if err != nil {
