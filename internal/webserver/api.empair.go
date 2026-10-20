@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"os"
+	"path/filepath"
 
 	parser "github.com/osc-em/converter-OSCEM-to-mmCIF/parser"
 )
@@ -15,7 +16,7 @@ func (i *DepositorWebServerImplemenation) EmpiarControllerGetSchema(
 	_ EmpiarControllerGetSchemaRequestObject,
 ) (EmpiarControllerGetSchemaResponseObject, error) {
 
-	schema, err := os.ReadFile("data/empiar_deposition.schema.json")
+	schema, err := os.ReadFile(filepath.Join(i.DataDir, "empiar_deposition.schema.json"))
 
 	if err != nil || len(schema) == 0 || !json.Valid(schema) {
 		message := "could not read a valid EMPIAR schema"
@@ -65,8 +66,8 @@ func (i *DepositorWebServerImplemenation) EmpiarControllerCreateMetadataJSON(ctx
 	cifText, err := parser.EMDBconvert(
 		scientificMetadata,
 		"",
-		"data/conversions.csv",
-		"data/mmcif_pdbx_v50.dic",
+		filepath.Join(i.DataDir, "conversions.csv"),
+		filepath.Join(i.DataDir, "mmcif_pdbx_v50.dic"),
 	)
 	if err != nil {
 		return getErrorResponse[EmpiarControllerCreateMetadataJSON400JSONResponse](

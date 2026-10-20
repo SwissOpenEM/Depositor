@@ -11,6 +11,7 @@ type Config struct {
 	AllowOrigins []string
 	BaseUrl      string
 	LogLevel     string
+	DataDir      string
 }
 
 func GetConfig() (Config, error) {
@@ -24,6 +25,7 @@ func GetConfig() (Config, error) {
 		AllowOrigins: []string{getEnv("ALLOW_ORIGINS", "http://localhost:4200")},
 		BaseUrl:      getEnv("ONEDEP_API_BASE_URL", "https://onedep-depui-test.wwpdb.org/deposition/api/v1"),
 		LogLevel:     getEnv("LOG_LEVEL", "Debug"),
+		DataDir:      getEnv("DATA_DIR", "data"),
 	}, nil
 }
 
