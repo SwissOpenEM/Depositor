@@ -16,11 +16,12 @@ func TestGetConfigDefaults(t *testing.T) {
 	}
 
 	want := Config{
-		Port:         8080,
-		AllowOrigins: []string{"http://localhost:4200"},
-		BaseUrl:      "https://onedep-depui-test.wwpdb.org/deposition/api/v1",
-		LogLevel:     "Debug",
-		DataDir:      "data",
+		Port:          8080,
+		AllowOrigins:  []string{"http://localhost:4200"},
+		OneDepBaseUrl: "https://onedep-depui-test.wwpdb.org/deposition/api/v1",
+		OneDepTimeout: 30,
+		LogLevel:      "Debug",
+		DataDir:       "data",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("GetConfig() = %#v, want %#v", got, want)
@@ -33,6 +34,7 @@ func TestGetConfigEnvironmentOverrides(t *testing.T) {
 	t.Setenv("ONEDEP_API_BASE_URL", "https://api.example.org")
 	t.Setenv("LOG_LEVEL", "Info")
 	t.Setenv("DATA_DIR", "/var/lib/depositor")
+	t.Setenv("ONEDEP_TIMEOUT", "60")
 
 	got, err := GetConfig()
 	if err != nil {
@@ -40,11 +42,12 @@ func TestGetConfigEnvironmentOverrides(t *testing.T) {
 	}
 
 	want := Config{
-		Port:         9090,
-		AllowOrigins: []string{"https://example.org"},
-		BaseUrl:      "https://api.example.org",
-		LogLevel:     "Info",
-		DataDir:      "/var/lib/depositor",
+		Port:          9090,
+		AllowOrigins:  []string{"https://example.org"},
+		OneDepBaseUrl: "https://api.example.org",
+		OneDepTimeout: 60,
+		LogLevel:      "Info",
+		DataDir:       "/var/lib/depositor",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("GetConfig() = %#v, want %#v", got, want)
@@ -72,6 +75,7 @@ func unsetConfigEnv(t *testing.T) {
 		"PORT",
 		"ALLOW_ORIGINS",
 		"ONEDEP_API_BASE_URL",
+		"ONEDEP_TIMEOUT",
 		"LOG_LEVEL",
 		"DATA_DIR",
 	} {

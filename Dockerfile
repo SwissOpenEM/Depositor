@@ -1,33 +1,35 @@
-# syntax=docker/dockerfile:1
-
-# Build stage
-FROM golang:1.23 AS builder
+FROM golang:1.26-alpine AS builder
 
 # Set destination for COPY
 WORKDIR /app
+
+# install installation tools
+RUN apk add --no-cache curl
 
 # Download Go modules
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the source code
-COPY main.go ./
+# Copy the source code. Note the slash at the end, as explained in
+# https://docs.docker.com/reference/dockerfile/#copy
+COPY ./api ./api
+COPY ./cmd ./cmd
+COPY ./depositions ./depositions
+COPY ./internal ./internal
+
 
 # Download conversions.csv from OSCEM GitHub repository
-RUN mkdir -p /app/data && \
-    curl -L https://raw.githubusercontent.com/osc-em/Converter/main/csv/pdb_conversions.csv -o /app/data/conversions.csv
+RUN mkdir -p ./data && \
+    curl -L https://raw.githubusercontent.com/osc-em/Converter/main/csv/pdb_conversions.csv -o ./data/conversions.csv
 
-COPY /data/mmcif_pdbx_v50.dic /app/data/mmcif_pdbx_v50.dic
-COPY depositions/onedep ./depositions/onedep
-COPY docs ./docs
-COPY README.md /app/README.md
-COPY /data/empiar_deposition.schema.json /app/data/empiar_deposition.schema.json
+COPY ./data/mmcif_pdbx_v50.dic ./data/mmcif_pdbx_v50.dic
+COPY ./data/empiar_deposition.schema.json ./data/empiar_deposition.schema.json
 
-ARG VERSION=v.0.1.0
+ARG VERSION=DEVELOPMENT_VERSION
 
-# Build GOARCH=amd64
-RUN CGO_ENABLED=0 GOOS=linux  GOARCH=${TARGETARCH} go generate .
-RUN CGO_ENABLED=0 GOOS=linux  GOARCH=${TARGETARCH} go build -o /app/depositor
+# Build
+RUN CGO_ENABLED=0 GOOS=linux go generate ./internal/webserver
+RUN CGO_ENABLED=0 GOOS=linux go build -C ./cmd/openem-depositor-service/ -v -o /app/depositor  -ldflags="-s -w  -X 'main.version=${VERSION}'"
 
 # Stage 2: download pdb_extract 
 FROM alpine:3.20 AS extractor
@@ -58,7 +60,6 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /app/depositor /app/depositor
 COPY --from=builder /app/data/conversions.csv /app/data/conversions.csv
 COPY --from=builder /app/data/mmcif_pdbx_v50.dic /app/data/mmcif_pdbx_v50.dic
-COPY --from=builder /app/README.md /app/README.md
 #WILL REMOVE LATER
 COPY --from=builder /app/data/empiar_deposition.schema.json /app/data/empiar_deposition.schema.json
 # Copy extracted pdb_extract directory

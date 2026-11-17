@@ -7,11 +7,12 @@ import (
 )
 
 type Config struct {
-	Port         int
-	AllowOrigins []string
-	BaseUrl      string
-	LogLevel     string
-	DataDir      string
+	Port          int
+	AllowOrigins  []string
+	OneDepBaseUrl string
+	OneDepTimeout int
+	LogLevel      string
+	DataDir       string
 }
 
 func GetConfig() (Config, error) {
@@ -20,12 +21,18 @@ func GetConfig() (Config, error) {
 		return Config{}, fmt.Errorf("invalid PORT: %w", err)
 	}
 
+	timeout, err := strconv.Atoi(getEnv("ONEDEP_TIMEOUT", "30"))
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid PORT: %w", err)
+	}
+
 	return Config{
-		Port:         port,
-		AllowOrigins: []string{getEnv("ALLOW_ORIGINS", "http://localhost:4200")},
-		BaseUrl:      getEnv("ONEDEP_API_BASE_URL", "https://onedep-depui-test.wwpdb.org/deposition/api/v1"),
-		LogLevel:     getEnv("LOG_LEVEL", "Debug"),
-		DataDir:      getEnv("DATA_DIR", "data"),
+		Port:          port,
+		AllowOrigins:  []string{getEnv("ALLOW_ORIGINS", "http://localhost:4200")},
+		OneDepBaseUrl: getEnv("ONEDEP_API_BASE_URL", "https://onedep-depui-test.wwpdb.org/deposition/api/v1"),
+		OneDepTimeout: timeout,
+		LogLevel:      getEnv("LOG_LEVEL", "Debug"),
+		DataDir:       getEnv("DATA_DIR", "data"),
 	}, nil
 }
 

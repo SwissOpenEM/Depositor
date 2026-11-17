@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gin-gonic/gin"
@@ -134,6 +135,30 @@ func (e OneDepType) Valid() bool {
 	}
 }
 
+// Defines values for RequestCreateMethod.
+const (
+	Helical     RequestCreateMethod = "helical"
+	Single      RequestCreateMethod = "single"
+	Subtomogram RequestCreateMethod = "subtomogram"
+	Tomography  RequestCreateMethod = "tomography"
+)
+
+// Valid indicates whether the value is a known member of the RequestCreateMethod enum.
+func (e RequestCreateMethod) Valid() bool {
+	switch e {
+	case Helical:
+		return true
+	case Single:
+		return true
+	case Subtomogram:
+		return true
+	case Tomography:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Status.
 const (
 	AUCO Status = "auco"
@@ -198,24 +223,47 @@ type CreatedDeposition struct {
 
 // DepositionResponse defines model for DepositionResponse.
 type DepositionResponse struct {
-	BmrbId  *string      `json:"bmrb_id,omitempty"`
-	Code    *string      `json:"code,omitempty"`
-	Created *string      `json:"created,omitempty"`
-	Email   *string      `json:"email,omitempty"`
-	EmdbId  *string      `json:"emdb_id,omitempty"`
-	Errors  *OneDepError `json:"errors,omitempty"`
+	// BmrbId BMRB accession code.
+	BmrbId *string `json:"bmrb_id,omitempty"`
+	Code   *string `json:"code,omitempty"`
+
+	// Created Date and time when this deposition was created.
+	Created *time.Time `json:"created,omitempty"`
+
+	// Email Main email address associated with this deposition
+	Email *openapi_types.Email `json:"email,omitempty"`
+
+	// EmdbId EMDB accession code.
+	EmdbId *string      `json:"emdb_id,omitempty"`
+	Errors *OneDepError `json:"errors,omitempty"`
 
 	// Experiments FIX ME actual response type does not correspond to the documented.
 	Experiments interface{} `json:"experiments,omitempty"`
-	HoldExpDate *string     `json:"hold_exp_date,omitempty"`
-	Id          *string     `json:"id,omitempty"`
-	LastLogin   *string     `json:"last_login,omitempty"`
-	Message     *string     `json:"message,omitempty"`
-	PdbId       *string     `json:"pdb_id,omitempty"`
-	Site        *string     `json:"site,omitempty"`
-	SiteUrl     *string     `json:"site_url,omitempty"`
-	Status      *Status     `json:"status,omitempty"`
-	Title       *string     `json:"title,omitempty"`
+
+	// HoldExpDate Hold expiration date.
+	HoldExpDate *string `json:"hold_exp_date,omitempty"`
+
+	// Id Deposition identifier.
+	Id *string `json:"id,omitempty"`
+
+	// LastLogin Date and time when this deposition was last accessed.
+	LastLogin *time.Time `json:"last_login,omitempty"`
+	Message   *string    `json:"message,omitempty"`
+
+	// PdbId PDB accession code.
+	PdbId *string `json:"pdb_id,omitempty"`
+
+	// Site Site responsible for this entry. Possible values: PDBe, PDBj, RCSB, PDBc, PDBi.
+	Site *string `json:"site,omitempty"`
+
+	// SiteUrl URL for viewing this deposition.
+	SiteUrl *string `json:"site_url,omitempty"`
+
+	// Status Status code representing the current state of the deposition.
+	Status *Status `json:"status,omitempty"`
+
+	// Title Title of the associated publication.
+	Title *string `json:"title,omitempty"`
 }
 
 // FileResponse defines model for FileResponse.
@@ -249,14 +297,28 @@ type OneDepType string
 
 // RequestCreate defines model for RequestCreate.
 type RequestCreate struct {
-	Coordinates *bool    `json:"coordinates,omitempty"`
-	Country     string   `json:"country"`
-	Email       string   `json:"email"`
-	JwtToken    string   `json:"jwtToken"`
-	Method      string   `json:"method"`
-	OrcidIds    []string `json:"orcidIds"`
-	Password    *string  `json:"password,omitempty"`
+	// Coordinates Whether coordinate files are included in this deposition.
+	Coordinates *bool `json:"coordinates,omitempty"`
+
+	// Country Location of the institute.
+	Country string `json:"country"`
+
+	// Email Main email address associated with this deposition.
+	Email    openapi_types.Email `json:"email"`
+	JwtToken string              `json:"jwtToken"`
+
+	// Method The subtype for this EM experiment.
+	Method RequestCreateMethod `json:"method"`
+
+	// OrcidIds ORCID iDs whose owners are allowed to access this deposition.
+	OrcidIds []string `json:"orcidIds"`
+
+	// Password An alternative password to access this deposition. If not provided, one will be generated automatically and sent to the provided email address.
+	Password *string `json:"password,omitempty"`
 }
+
+// RequestCreateMethod The subtype for this EM experiment.
+type RequestCreateMethod string
 
 // ResponseType defines model for ResponseType.
 type ResponseType struct {
@@ -264,7 +326,7 @@ type ResponseType struct {
 	Status  *string `json:"status,omitempty"`
 }
 
-// Status defines model for Status.
+// Status Status code representing the current state of the deposition.
 type Status string
 
 // Scientificmetadata defines model for Scientificmetadata.
@@ -1550,44 +1612,51 @@ func (sh *strictHandler) OtherControllerGetVersion(ctx *gin.Context) {
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"PAv3KUi8d8O5tcsNdnO7+e8A",
+	"7Ftddxo50v4rOnrn4t1zGtuzM7sX3isMOGbGGA7YE2cnWY5oFaCkW+qV1HxMlv++p6T+AhpsZ5xsMuMb",
+	"t0RLVaVS1VOlUvsjDVWcKAnSGnr+kWr4dwrGXiguwP0wCgVIK6YijMEyzizDX0MlLUiLTZYkkQiZFUqe",
+	"vjdK4m8mnEPsBtp1AvScqsl7CC3dbDYB5WBCLRKcQM8r9EnOgDBDGPlp1L8hxmohZ/8gsEogtIZABDGK",
+	"SqZaxaQ/anV6REli50CsSkgEC4ho4FYhNHB6bnUKyNRL5FbU0sAs8DYkyggvxUeaaJWAttmiOSTddkV8",
+	"LwZFQjsLCmhJZwgmUdLAPr1JrCdjwT3p6uovesMLwsIQjBFKklBxOKHBLtuA4osaeQIa+sXsU24zC4RJ",
+	"TqyIgSzngFoShvBCXLJkhmTzkelU6ZhZek45s9DAaXWSQMxEtM+ux4Qk7h1hnGswhjBjVCiQOlkKO99l",
+	"X+XoidZy4/WK6/Taj1IcaK2024PvNEzpOf2/09LgTzOrOO1LaEPSwbFu0ioBLeLcJ7Y5X3bvSa9DWGhT",
+	"FhGd7TlBzoQrMEQqS0Kl/RtOrHLmyVWYIkXU9SagcxXxMaySMSp7n8mVijgavdDOsQiOql1fnW5KiySC",
+	"e+cCXTs7YsaOIzUT8pMNCElkG/EUM4rBGDart+nkwJ4PHrflRtRpdCQs5LslJhGQqdJ+QSCtXp+QgTL+",
+	"xYJFKZhzMmhfQIB/3wdk2BpduHbo/oqTt/IQ63Gqa/zjbnjtOC4ELIWc7apyS3GpFrXELbPpg6Y88qMQ",
+	"qYSNahRxiz8TNXVWWfHRJJ3kOF6j1jrkuxQRHMa8CjId8crP4VuiylRICzPQ3ubKAMY4d4pn0aAq9V54",
+	"QoZ2DhpojQIki2sUXDOlXLn/4TFodIsjNwFdMi2FnH0mbdXtaxUN97f1UCSCldXMHNEtFRbiTMnZbKY1",
+	"W9M6GQ7jw2GJbzPdgkxjev4rytGIWUIxfDZCMaUBjXnWCFUj4RP0OhM2VjEGnzmLptl4Ec8aGHooQuQa",
+	"dCMSEgzOZ+ZDNkbGDZauGiyelJ2ZVr6TAGswufYdDaYchp2JUGUnnLNKR5pKZ115w9ey7BR8sCMMLzvK",
+	"zsuOVhVqZl2RYJVEvmPmwjdSKRoSpmXHWE0DulDZclesgejkGgnTvmGVe2Uypa5MI7a/0Xe7dh/QVQM3",
+	"pbFgGn3G4O402+1xrzmgAW31x63uJQ1or501Wv3xoH1BA3o5ao3ve9c0oFfN68tsfLf3aozxnwb0uvmm",
+	"Mxxfd286I5zfHP2cjbnpjZt39+Nm76LsvBr2fWfQaY6bN298Z9gZlcOwc9Htl53WVbPSuRlVOm8qb9pv",
+	"bspOwQc73VG77PRvr8rOsF+hNnpTkeB+cO07o6uub9zddMc3ncuyM7od0oD+0s+We98c95q3vjFoDn3j",
+	"tu9ejTKl3o/Gvdt/0nebgA59lu8z4TofV5oLyWyeDU9ZGlmfTO8C5Os5INiRcg6ZiggMYRqIkGGUcuBE",
+	"yLqIl1nJRKkImPR5borReIsrHS2F/Q10xCSnu+yvlQ9ZeUAT0lhh0wPZ0rMlryePyl7fL+2t+gCyFi9j",
+	"sHNVk+XczoGYdILjyxyl0yNlUorMc4ybAwZt5G6EnEWAjXRiVaxmmsUolG8m8/W+X24CqnQoeJfXRJf+",
+	"sNVtE9E2ZDlXBohaStB+W1kUqSW4gOLzsTr15GhPE2YtaCT5r7dv+ccfN439xw+b/3/7lv/n/i/fHQ6a",
+	"ZbRImDFLpWuU15SERciNWbEAkg88IinpTl2cTLRaCA48IEoCWYooIhMgM5CgnRWw1KqYWVR2tHZ5sQFp",
+	"85iaz962otoscVM9nv5aWHxQmFFhNYWNVLbpXU30y3OwPP5tO/OxTLtMKR8RZEfF4J3M2v3u8nGiIdGA",
+	"ivE5LpAw1Rr1hJyKrHPbUIpwnYaKBpSlLoSxdGX8I3VOn1B/aMJHkmIoUxMckKgoxIdWoTv4++N/4h8p",
+	"zloyYfHBtXxsaLprIYI37xxcN+/uR/5xRwPa7iCoXvWvEdavBncI2/0LHDDoX7fwMezjY9i5dn8H/nGH",
+	"s143u4jRr9vDG/rO1UKEnKp9jQ7BWNIcdJ3/hyqOU5ll5mQCdgkgySgULWaxDCItSO4MMlOr0mTCwg8g",
+	"+Qm58A1iQC9ECAQkmyA4Vw5xaoqnS2bAGrRmn0ohd4eg/gxB+wnITkzaBYfmACPTArTxIn9/cnZy5gAl",
+	"AckSQc/pDydnJz/g1jA7d2ZzCnEimD6t5uGJMnZfATcYWtGI3aK7HA/8bm5LSatVFIH2sauXkcJiEQ0q",
+	"1av1oSR7q8B1WlPdcv7pHcpJ/dezsyMVLxVasJgrAYu3K19FeJgIyZyD7/rY3mHjVYE2re6lC6No7cA4",
+	"+MNSy8vQaAtTrV3tQKC1LJxjnHAU3Bkl2K/IlVJsAvrj2dmTqnrHTi9baFSzSHeuKE4rqO6/fUHuXemi",
+	"Q+Q8AjQBX/NBLEzjGPfpnDY5d6oLSCJWEBGTsFDIWUBQQpVqX2bMXK4gjs5TcSshM1fCjWczhyve/tH1",
+	"g8IZymXN4NM84RXYkSfyJMs9WKs9bJ8TZuDvPxKQiPWcZDNf7GfHfoZgtYAFbAdAx8Aheqc36DaHFWMx",
+	"h2xEScDIdxAnPQgSRiQsq8Y3WZM0iRTjGIbLxNGZbGpAEw6WiagG8LdNzb/bBd0bWLarZdwd1H2mfaie",
+	"UGo24g6XIaRH2VKOStV/zxu+fzbpamr+dVcbqU85czH8SaKcS7rtF+fZdZ5DJl1YasVXMveo+sojkou2",
+	"WsrcN1h56YSIf0K6cqE+AGazcgHagvapvmXaGsKzmQ87Ss4jz0++/dyk//PDtnqY4Ze02c8jxWNs9xVY",
+	"wkgops6YvLuX9qU0iZnEUu0DaUKdWWOx8quw6Jar9B2G/DiNrEiYtqdoZI3cFctN2D6doow1lW1Un1VZ",
+	"EKPBwwYbUFO4S68CAV/gsvn4+b5GrMCvev8ov9k8HMReHP5bcXh0s0ol9XcCwEf3TcLmNHeYeiS4K7I+",
+	"f4BBGQqBnpjseVqX/hSaMM1isO4g+uuRC+duG9ks5yKcE49AxMxVGnGspnl3BnRogfOwMkDza7Tso4td",
+	"Dzh2dH33VQIRUjoMQY7iQfB5qIq8Teun17fE4itnW+XePghKWWlhS9IKo+dHpqflkVsXyzWu6XT4kjx/",
+	"wcrFMUR6OOMuUWkrN9kBJHKLpXlRfJOEp9iEaZOXkp2bFASEzErvRV7zWESrWPwfHtWeAzu+2tSqclFS",
+	"I+ELiH3DIHYwqfp9UHX0FLWdO31atjTgkz8DrDxfsvRnAags43rBqT8WTlXPd8+bVSVahWDMYbga+AGE",
+	"1XJ5HGhlNL5JyKpu/qqxXC4bDrpSHWX3U587Lzrk7P9rh97//4YaA3+5hTjq27lzPeUCovgY4sBVbu21",
+	"YDYp/zKm+MBi33XtHLYvfX/J+H3uW9/CVHQu7afYy4Nsdo1i90o11XJXa9WdQPVkH9Vkv+190Jbr0xAN",
+	"kTthWkX8Fu5cxmaI5d/RTfA4Uv5ivp5Udq27T+oy1Sg6USVJBB7/4Vm0c8OZy+UWu3m3+e8A",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

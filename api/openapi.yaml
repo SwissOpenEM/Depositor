@@ -432,36 +432,53 @@ components:
       properties:
         bmrb_id:
           type: string
+          description: BMRB accession code.
         code:
           type: string
         created:
           type: string
+          format: date-time
+          description: Date and time when this deposition was created. 
         email:
           type: string
+          format: email
+          description: Main email address associated with this deposition
         emdb_id:
           type: string
+          description: EMDB accession code.
         errors:
           $ref: "#/components/schemas/OneDepError"
         experiments:
           description: FIX ME actual response type does not correspond to the documented.
         hold_exp_date:
           type: string
+          description: Hold expiration date.
         id:
           type: string
+          description: Deposition identifier.
         last_login:
           type: string
+          format: date-time
+          description: Date and time when this deposition was last accessed.
         message:
           type: string
         pdb_id:
           type: string
+          description: PDB accession code.
         site:
           type: string
+          description: >
+                Site responsible for this entry. Possible values: PDBe, PDBj,
+                RCSB, PDBc, PDBi.
         site_url:
           type: string
+          format: uri
+          description: URL for viewing this deposition.
         status:
           $ref: "#/components/schemas/Status"
         title:
           type: string
+          description: Title of the associated publication.
       type: object
     FileResponse:
       properties:
@@ -569,20 +586,36 @@ components:
       properties:
         coordinates:
           type: boolean
+          default: true
+          description: Whether coordinate files are included in this deposition.
         country:
           type: string
+          description: Location of the institute.
+          default: "Switzerland"
         email:
           type: string
+          format: email
+          description: Main email address associated with this deposition.
         jwtToken:
           type: string
         method:
           type: string
+          enum:
+            - helical
+            - single
+            - subtomogram
+            - tomography
+          description: The subtype for this EM experiment.
         orcidIds:
+          type: array
           items:
             type: string
-          type: array
+            pattern: ^\d{4}-\d{4}-\d{4}-\d{3}(\d|X)$
+          description: ORCID iDs whose owners are allowed to access this deposition.
         password:
           type: string
+          description: >
+            An alternative password to access this deposition. If not provided, one will be generated automatically and sent to the provided email address.
       required:
         - country
         - email
@@ -615,6 +648,7 @@ components:
         - wait
         - wdrn
       type: string
+      description: Status code representing the current state of the deposition.
       x-enum-varnames:
         - AUCO
         - AUTH
