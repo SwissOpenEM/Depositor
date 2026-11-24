@@ -1,9 +1,11 @@
 package webserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -78,6 +80,217 @@ const depositionCreatedJSON = `{
 	"title": "",
 	"experiments": [{"type": "em", "subtype": "single", "coordinates": true}]
 }`
+
+func mockOneDepFileUpload(
+	t *testing.T,
+	uploadStatus int,
+	uploadResponse string,
+	metadataStatus int,
+	metadataResponse string,
+	inspectUpload func(t *testing.T, r *http.Request),
+) *DepositorWebServerImplementation {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/depositions/D_800001/files/":
+			if r.Method != http.MethodPost {
+				t.Errorf("upload method = %s, want POST", r.Method)
+			}
+			if inspectUpload != nil {
+				inspectUpload(t, r)
+			}
+			w.WriteHeader(uploadStatus)
+			_, _ = io.WriteString(w, uploadResponse)
+		case "/depositions/D_800001/files/42/metadata":
+			if metadataStatus == 0 {
+				t.Errorf("unexpected metadata update request")
+				http.NotFound(w, r)
+				return
+			}
+			if r.Method != http.MethodPost {
+				t.Errorf("metadata method = %s, want POST", r.Method)
+			}
+			if got := r.Header.Get("Authorization"); got != "Bearer "+testToken {
+				t.Errorf("metadata Authorization = %q, want %q", got, "Bearer "+testToken)
+			}
+			var metadata onedep.EMMapMetadata
+			if err := json.NewDecoder(r.Body).Decode(&metadata); err != nil {
+				t.Errorf("decoding metadata update body: %v", err)
+			} else if metadata.Description == nil || *metadata.Description != "test map" {
+				t.Errorf("metadata description = %v, want test map", metadata.Description)
+			}
+			w.WriteHeader(metadataStatus)
+			_, _ = io.WriteString(w, metadataResponse)
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	client, err := onedep.NewClientWithResponses(srv.URL)
+	if err != nil {
+		t.Fatalf("creating OneDep client: %v", err)
+	}
+	return &DepositorWebServerImplementation{OneDepClient: client}
+}
+
+func validUploadRequest(t *testing.T, fileMetadata string) OneDepControllerUploadFileRequestObject {
+	t.Helper()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	filePart, err := writer.CreateFormFile("file", "source.mrc")
+	if err != nil {
+		t.Fatalf("creating file part: %v", err)
+	}
+	if _, err := io.WriteString(filePart, "map-data"); err != nil {
+		t.Fatalf("writing file part: %v", err)
+	}
+	if err := writer.WriteField("fileMetadata", fileMetadata); err != nil {
+		t.Fatalf("writing fileMetadata field: %v", err)
+	}
+	if err := writer.WriteField("jwtToken", testToken); err != nil {
+		t.Fatalf("writing jwtToken field: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("closing multipart writer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/onedep/D_800001/file", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	reader, err := req.MultipartReader()
+	if err != nil {
+		t.Fatalf("creating multipart reader: %v", err)
+	}
+	return OneDepControllerUploadFileRequestObject{DepID: "D_800001", Body: reader}
+}
+
+const fileUploadCreatedJSON = `{
+	"id": 42,
+	"name": "map.mrc",
+	"type": "add-map",
+	"created": "2026-11-17T10:00:00Z",
+	"errors": [],
+	"warnings": []
+}`
+
+func TestOneDepControllerUploadFile_Success(t *testing.T) {
+	t.Parallel()
+
+	server := mockOneDepFileUpload(
+		t,
+		http.StatusCreated,
+		fileUploadCreatedJSON,
+		http.StatusOK,
+		`{"id":42,"name":"map.mrc","type":"add-map","created":"2026-11-17T10:00:00Z","metadata":{"description":"test map"}}`,
+		func(t *testing.T, r *http.Request) {
+			if got := r.Header.Get("Authorization"); got != "Bearer "+testToken {
+				t.Errorf("Authorization = %q, want %q", got, "Bearer "+testToken)
+			}
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				t.Fatalf("parsing OneDep multipart request: %v", err)
+			}
+			if got := r.FormValue("name"); got != "map.mrc" {
+				t.Errorf("name = %q, want map.mrc", got)
+			}
+			if got := r.FormValue("type"); got != "add-map" {
+				t.Errorf("type = %q, want add-map", got)
+			}
+			file, _, err := r.FormFile("file")
+			if err != nil {
+				t.Fatalf("reading OneDep file part: %v", err)
+			}
+			defer file.Close()
+			content, err := io.ReadAll(file)
+			if err != nil {
+				t.Fatalf("reading OneDep file content: %v", err)
+			}
+			if string(content) != "map-data" {
+				t.Errorf("file content = %q, want map-data", content)
+			}
+		},
+	)
+
+	request := validUploadRequest(t, `{"name":"map.mrc","type":"add-map","metadata":{"description":"test map"}}`)
+	response, err := server.OneDepControllerUploadFile(context.Background(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, ok := response.(OneDepControllerUploadFile200JSONResponse)
+	if !ok {
+		t.Fatalf("response type = %T, want 200 response", response)
+	}
+	if got.Id == nil || *got.Id != 42 {
+		t.Errorf("Id = %v, want 42", got.Id)
+	}
+	if got.Name == nil || *got.Name != "map.mrc" {
+		t.Errorf("Name = %v, want map.mrc", got.Name)
+	}
+	if got.Metadata == nil || (*got.Metadata)["description"] != "test map" {
+		t.Errorf("Metadata = %v, want description=test map", got.Metadata)
+	}
+}
+
+func TestOneDepControllerUploadFile_InvalidInput(t *testing.T) {
+	t.Parallel()
+
+	server := mockOneDepFileUpload(
+		t,
+		http.StatusCreated,
+		fileUploadCreatedJSON,
+		0,
+		"",
+		func(t *testing.T, _ *http.Request) {
+			t.Error("OneDep was called for invalid input")
+		},
+	)
+	request := validUploadRequest(t, `not JSON`)
+
+	response, err := server.OneDepControllerUploadFile(context.Background(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, ok := response.(OneDepControllerUploadFile400JSONResponse)
+	if !ok {
+		t.Fatalf("response type = %T, want 400 response", response)
+	}
+	if got.Status == nil || *got.Status != "invalid_upload_request" {
+		t.Errorf("Status = %v, want invalid_upload_request", got.Status)
+	}
+}
+
+func TestOneDepControllerUploadFile_OneDepError(t *testing.T) {
+	t.Parallel()
+
+	server := mockOneDepFileUpload(
+		t,
+		http.StatusBadRequest,
+		`{"code":"invalid_file","message":"unsupported file"}`,
+		0,
+		"",
+		nil,
+	)
+	request := validUploadRequest(t, `{"name":"map.mrc","type":"add-map"}`)
+
+	response, err := server.OneDepControllerUploadFile(context.Background(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, ok := response.(OneDepControllerUploadFile400JSONResponse)
+	if !ok {
+		t.Fatalf("response type = %T, want 400 response", response)
+	}
+	if got.Status == nil || *got.Status != "invalid_file" {
+		t.Errorf("Status = %v, want invalid_file", got.Status)
+	}
+	if got.Message == nil || *got.Message != "unsupported file" {
+		t.Errorf("Message = %v, want unsupported file", got.Message)
+	}
+}
 
 func TestOneDepControllerCreateNewDeposition_Success(t *testing.T) {
 	t.Parallel()
@@ -183,7 +396,7 @@ func TestOneDepControllerCreateNewDeposition_OneDepErrors(t *testing.T) {
 			name:       "undecodable 201 body",
 			status:     http.StatusCreated,
 			body:       `not json`,
-			want500:    true,
+			want500:    false,
 			wantStatus: "onedep_request_failed",
 		},
 	}
@@ -279,9 +492,9 @@ func TestOneDepControllerCreateNewDeposition_OneDepUnreachable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	got, ok := response.(OneDepControllerCreateNewDeposition500JSONResponse)
+	got, ok := response.(OneDepControllerCreateNewDeposition400JSONResponse)
 	if !ok {
-		t.Fatalf("response type = %T, want 500 response", response)
+		t.Fatalf("response type = %T, want 400 response", response)
 	}
 	if got.Status == nil || *got.Status != "onedep_request_failed" {
 		t.Errorf("Status = %v, want onedep_request_failed", got.Status)
